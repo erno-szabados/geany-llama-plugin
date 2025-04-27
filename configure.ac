@@ -1,4 +1,4 @@
-AC_INIT([geany-llm-plugin], [0.1], [erno.szabados@windowslive.com.com])
+AC_INIT([geany-llm-plugin], [0.1], [erno.szabados@windowslive.com])
 
 
 AC_CONFIG_SRCDIR([src/plugin.c])
@@ -36,6 +36,13 @@ LIBCURL_LIBS="$LIBCURL_LIBS"
 # gettext (for internationalization)
 AM_GNU_GETTEXT_VERSION([0.21]) # Specify the gettext version
 AM_GNU_GETTEXT([external]) # Use external gettext library
+
+dnl Find the Geany library directory using pkg-config
+geany_libdir=$($PKG_CONFIG --variable=libdir geany)
+
+dnl Set the libdir variable for installation
+libdir="$geany_libdir"
+AC_SUBST(libdir)
 
 AC_CONFIG_FILES([Makefile src/Makefile po/Makevars po/Makefile.in])
 AC_OUTPUT

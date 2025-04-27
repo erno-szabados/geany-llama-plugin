@@ -11,6 +11,7 @@ gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata)
     llm_plugin = g_new(LLMPlugin, 1);
     llm_plugin->geany_plugin = plugin;
     llm_plugin->geany_data = plugin->geany_data;
+    g_print("LLM Plugin init");
 
     // --- Create your plugin's UI ---
     // This is where you would create your GTK widgets for the LLM panel,	
@@ -40,6 +41,7 @@ gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata)
 // Called when the plugin is unloaded
 void llm_plugin_cleanup(GeanyPlugin *plugin, gpointer pdata)
 {
+	g_print("LLM Plugin cleanup");
     // --- Clean up resources ---
     // Destroy your GTK UI elements
     // Free allocated memory
@@ -62,6 +64,7 @@ void llm_plugin_cleanup(GeanyPlugin *plugin, gpointer pdata)
 
 GtkWidget *llm_plugin_configure(GeanyPlugin *plugin, GtkDialog *dialog, gpointer pdata) 
 {
+	g_print("LLM Plugin configure");
 	// TODO!
 	return llm_plugin->config_panel;
 }

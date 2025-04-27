@@ -29,6 +29,7 @@ po/.libs/
 *.mo
 *.pot
 po/*.gmo
+po/stamp-po
 
 # Ignore debugging and editor/IDE files
 *.gdb
