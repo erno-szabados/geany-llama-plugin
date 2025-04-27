@@ -1,7 +1,9 @@
 #include "plugin.h"
+#include "settings.h"
+
 
 // Static instance of your plugin data
-static LLMPlugin *llm_plugin = NULL;
+LLMPlugin *llm_plugin = NULL;
 
 // --- Geany Plugin Entry Points ---
 
@@ -11,7 +13,11 @@ gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata)
     llm_plugin = g_new(LLMPlugin, 1);
     llm_plugin->geany_plugin = plugin;
     llm_plugin->geany_data = plugin->geany_data;
-    g_print("LLM Plugin init");
+    llm_plugin->llm_panel = NULL;
+    llm_plugin->llm_server_url = NULL; 
+    g_print("LLM Plugin init\n");
+
+    llm_plugin_settings_load(llm_plugin);
 
     // --- Create your plugin's UI ---
     // This is where you would create your GTK widgets for the LLM panel,	
@@ -41,7 +47,7 @@ gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata)
 // Called when the plugin is unloaded
 void llm_plugin_cleanup(GeanyPlugin *plugin, gpointer pdata)
 {
-	g_print("LLM Plugin cleanup");
+	g_print("LLM Plugin cleanup\n");
     // --- Clean up resources ---
     // Destroy your GTK UI elements
     // Free allocated memory
@@ -49,12 +55,8 @@ void llm_plugin_cleanup(GeanyPlugin *plugin, gpointer pdata)
 
     if (llm_plugin)
     {
-        // Example (conceptual): Destroy the panel
         if (llm_plugin->llm_panel)
             gtk_widget_destroy(llm_plugin->llm_panel);
-        if (llm_plugin->config_panel)
-			gtk_widget_destroy(llm_plugin->config_panel);
-
         g_free(llm_plugin);
         llm_plugin = NULL;
     }
@@ -62,12 +64,38 @@ void llm_plugin_cleanup(GeanyPlugin *plugin, gpointer pdata)
     // curl_global_cleanup();
 }
 
-GtkWidget *llm_plugin_configure(GeanyPlugin *plugin, GtkDialog *dialog, gpointer pdata) 
+// Function to create the configuration widget for the plugin
+GtkWidget *llm_plugin_configure(GeanyPlugin *plugin, GtkDialog *dialog, gpointer pdata)
 {
-	g_print("LLM Plugin configure");
-	// TODO!
-	return llm_plugin->config_panel;
+    GtkWidget *vbox; // Main container for the configuration options
+    GtkWidget *url_label; // Label for the URL entry
+
+    // Create a vertical box to hold the configuration widgets
+    vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_container_set_border_width(GTK_CONTAINER(vbox), 10); // Add some padding
+
+    // Create a label for the URL entry
+    url_label = gtk_label_new(_("LLM Server URL:"));
+    // Set label alignment to the left
+    gtk_widget_set_halign(url_label, GTK_ALIGN_START);
+
+    // Create an entry field for the URL
+    llm_plugin->url_entry = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(llm_plugin->url_entry), "e.g., http://localhost:8080/completion");
+
+    // Pack the label and entry into the vertical box
+    gtk_box_pack_start(GTK_BOX(vbox), url_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), llm_plugin->url_entry, FALSE, FALSE, 0);
+
+    // Add any other configuration options here in a similar manner
+	g_signal_connect(dialog, "response", G_CALLBACK(on_configure_response), llm_plugin);
+    // Show all widgets in the box
+    gtk_widget_show_all(vbox);
+
+    // Return the main container widget. Geany will embed this in its configuration dialog.
+    return vbox;
 }
+
 
 void geany_load_module(GeanyPlugin *plugin) 
 {

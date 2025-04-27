@@ -1,3 +1,4 @@
 # List of source files which contain translatable strings.
 src/plugin.c
 src/plugin.h
+src/settings.c

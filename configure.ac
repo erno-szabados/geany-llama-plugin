@@ -37,12 +37,21 @@ LIBCURL_LIBS="$LIBCURL_LIBS"
 AM_GNU_GETTEXT_VERSION([0.21]) # Specify the gettext version
 AM_GNU_GETTEXT([external]) # Use external gettext library
 
-dnl Find the Geany library directory using pkg-config
-geany_libdir=$($PKG_CONFIG --variable=libdir geany)
-
-dnl Set the libdir variable for installation
-libdir="$geany_libdir"
+dnl Set the libdir 
+libdir=$($PKG_CONFIG --variable=libdir geany)
 AC_SUBST(libdir)
+
+dnl Set the data root directory
+datarootdir=$($PKG_CONFIG --variable=datarootdir geany)
+AC_SUBST(datarootdir)
+
+dnl Set the locale data directory 
+localedir=$($PKG_CONFIG --variable=localedir geany)
+AC_SUBST(localedir)
+
+dnl Set the include directory
+includedir=$($PKG_CONFIG --variable=includedir geany)
+AC_SUBST(includedir)
 
 AC_CONFIG_FILES([Makefile src/Makefile po/Makevars po/Makefile.in])
 AC_OUTPUT

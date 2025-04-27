@@ -5,7 +5,9 @@ plugin_LTLIBRARIES = libgeany_llm.la
 # Source files for your plugin
 libgeany_llm_la_SOURCES = \
     plugin.c \
-    plugin.h
+    plugin.h \
+    settings.c \
+    settings.h
 
 # Compiler flags (CFLAGS) and linker flags (LDFLAGS) for your plugin
 # These are automatically set by PKG_CHECK_MODULES in configure.ac
