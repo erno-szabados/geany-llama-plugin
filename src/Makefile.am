@@ -7,7 +7,10 @@ libgeany_llm_la_SOURCES = \
     plugin.c \
     plugin.h \
     settings.c \
-    settings.h
+    settings.h \
+    llm.c \
+    llm.h \
+    types.h
 
 # Compiler flags (CFLAGS) and linker flags (LDFLAGS) for your plugin
 # These are automatically set by PKG_CHECK_MODULES in configure.ac
@@ -17,13 +20,15 @@ libgeany_llm_la_CFLAGS = \
     $(LIBCURL_CFLAGS) \
     $(AM_C_CFLAGS) \
     $(WARN_CFLAGS) \
-    $(GETTEXT_CFLAGS)
+    $(GETTEXT_CFLAGS)\
+    $(JSONGLIB_CFLAGS)
 
 libgeany_llm_la_LIBADD = \
     $(GEANY_LIBS) \
     $(GTK3_LIBS) \
     $(LIBCURL_LIBS) \
-    $(GETTEXT_LIBS)
+    $(GETTEXT_LIBS) \
+    $(JSONGLIB_LIBS)
 
 # Installation directory for Geany plugins
 # Automake expects the installation directory for _LTLIBRARIES to be defined
@@ -34,8 +39,8 @@ plugindir = $(libdir)/geany
 
 # Internationalization (gettext)
 # Define the plugin's text domain and where to install the message catalog
-GETTEXT_PACKAGE = geany_llm_plugin
-LOCALE_ALIAS_DIR = $(datadir)/locale
+GETTEXT_PACKAGE = geany-llm-plugin
+LOCALE_ALIAS_DIR = $(localedir)
 AM_CPPFLAGS = -DLOCALEDIR=\"$(LOCALE_ALIAS_DIR)\"
 
 # Headers to be installed (optional)

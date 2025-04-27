@@ -2,3 +2,6 @@
 src/plugin.c
 src/plugin.h
 src/settings.c
+src/llm.c
+src/llm.h
+

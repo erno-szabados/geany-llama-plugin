@@ -28,6 +28,13 @@ PKG_CHECK_MODULES([GTK3], [gtk+-3.0 >= 3.0]) # Check for GTK3 development files.
 GTK3_CFLAGS="$GTK3_CFLAGS"
 GTK3_LIBS="$GTK3_LIBS"
 
+# JSON-GLIB
+PKG_CHECK_MODULES([JSONGLIB], [json-glib-1.0 >= 1.0],
+    [],
+    [AC_MSG_ERROR([json-glib is required but not installed])])
+JSONGLIB_CFLAGS="$JSONGLIB_CFLAGS"
+JSONGLIB_LIBS="$JSONGLIB_LIBS"
+
 # libcurl
 PKG_CHECK_MODULES([LIBCURL], [libcurl >= 7.0]) # Check for libcurl development files. Adjust version as needed.
 LIBCURL_CFLAGS="$LIBCURL_CFLAGS"

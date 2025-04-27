@@ -4,6 +4,7 @@
 #include "plugin.h"
 
 #define LLM_SERVER_URL_KEY "llm_server_url"
+#define LLM_ARGS_MODEL_KEY "model"
 
 void on_configure_response(GtkDialog *dialog, gint response, gpointer user_data);
 
