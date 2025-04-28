@@ -293,6 +293,40 @@ void llm_free_response(LLMResponse *response) {
     g_free(response->raw_json);
 }
 
+gpointer llm_thread_func(gpointer data) {
+    ThreadData *thread_data = (ThreadData *)data;
+
+    LLMPlugin *llm_plugin = thread_data->llm_plugin;
+    gchar *query = thread_data->query;
+
+    // Call the blocking function in the worker thread
+    LLMResponse *response = llm_query_completions(llm_plugin, query, llm_plugin->llm_args);
+
+    // Free the query as it's no longer needed
+    g_free(query);
+
+    // Pass the response back to the main thread
+    gdk_threads_add_idle((GSourceFunc)llm_update_ui, response);
+
+    // Free the thread data struct
+    g_free(thread_data);
+
+    return NULL;
+}
+
+gboolean llm_update_ui(LLMResponse *response) {
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(llm_plugin->output_text_view));
+
+    if (response->error) {
+        gtk_text_buffer_set_text(buffer, response->error, -1); 
+    } else {
+        gtk_text_buffer_set_text(buffer, response->response_text, -1); 
+    }
+
+    llm_free_response(response);
+
+    return FALSE; // Remove the idle function from the main loop
+}
 
 
 

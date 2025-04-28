@@ -25,4 +25,10 @@ LLMResponse *llm_query_chat_completions(LLMPlugin *plugin, const gchar *query, c
 /// @param LLMResponse *response
 void llm_free_response(LLMResponse *response);
 
+/// @brief Function to update the UI (runs on the main thread)
+gboolean llm_update_ui(LLMResponse *response);
+
+/// @brief Worker thread function
+gpointer llm_thread_func(gpointer data);
+
 #endif // __LLM_H__

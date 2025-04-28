@@ -5,6 +5,8 @@
  * Shared plugin types.
  */
 
+
+
 typedef struct {
     const gchar* role;    // "user", "assistant", "system"
     const gchar* content; // The message content
@@ -53,5 +55,11 @@ typedef struct
     // LLM arguments
     LLMArgs *llm_args; // LLM parameters (model, temp, max_token)
 } LLMPlugin;
+
+// Data structure to pass to the worker thread
+typedef struct {
+    LLMPlugin *llm_plugin;
+    gchar *query;
+} ThreadData;
 
 #endif // __TYPES_H__

@@ -174,28 +174,31 @@ static void on_input_clear_clicked (GtkButton *button, gpointer user_data)
     gtk_entry_set_text(GTK_ENTRY(llm_plugin->input_text_entry), "");
 }
 
-/// @brief Handle send button click event
-static void on_input_send_clicked (GtkButton *button,
-                   gpointer   user_data)
-{
-    LLMPlugin *llm_plugin = (LLMPlugin *)user_data;    
-    if (!llm_plugin)
+/// @brief Handle send button click event in a separate thread.
+static void on_input_send_clicked(GtkButton *button, gpointer user_data) {
+    LLMPlugin *llm_plugin = (LLMPlugin *)user_data;
+    if (!llm_plugin) {
+        
         return;
-    
-    g_print("Send Button was clicked!\n");
-    const gchar *input_text = gtk_entry_get_text(GTK_ENTRY(llm_plugin->input_text_entry));
-    gchar *query = g_strdup(input_text);
-    LLMResponse *response = llm_query_completions(llm_plugin, query, llm_plugin->llm_args); 
-    g_free(query);
-    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(llm_plugin->output_text_view));
-    if (response->error) {
-        //g_print("Failed query: %s\n", response->error);
-        gtk_text_buffer_set_text(buffer, response->error, -1); 
-    } else {
-        gtk_text_buffer_set_text(buffer, response->response_text, -1); 
     }
-   
-    llm_free_response(response);
+
+    g_print("Send Button was clicked!\n");
+
+    const gchar *input_text = gtk_entry_get_text(GTK_ENTRY(llm_plugin->input_text_entry));
+    if (!input_text || *input_text == '\0') {
+        g_print("Input text is empty!\n");
+        
+        return;
+    }
+
+    // Create a copy of the query and thread data
+    gchar *query = g_strdup(input_text);
+    ThreadData *thread_data = g_malloc(sizeof(ThreadData));
+    thread_data->llm_plugin = llm_plugin;
+    thread_data->query = query;
+
+    // Create a new thread to handle the blocking network request
+    g_thread_new("llm-thread", llm_thread_func, thread_data);
 }
 
 /// @brief Create the input part of the plugin window.
