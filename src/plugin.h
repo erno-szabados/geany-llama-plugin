@@ -13,13 +13,11 @@
 #define GEANY_LLM_PLUGIN_AUTHOR "Erno Szabados <erno.szabados@windowslive.com>"
 
 gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata);
+
 void llm_plugin_cleanup(GeanyPlugin *plugin, gpointer pdata);
 
 G_MODULE_EXPORT
 void geany_load_module(GeanyPlugin *plugin);
-
-// Add function declarations for your plugin's features here
-// For example, functions to create the UI, handle button clicks, etc.
 
 extern LLMPlugin* llm_plugin;
 

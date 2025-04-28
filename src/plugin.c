@@ -4,7 +4,6 @@
 #include "settings.h"
 #include "llm.h"
 
-
 #ifdef HAVE_CONFIG_H
 # include "config.h"
 #endif
@@ -15,9 +14,7 @@ static GtkWidget *create_llm_output_widget();
 // Static instance of your plugin data
 LLMPlugin *llm_plugin = NULL;
 
-// --- Geany Plugin Entry Points ---
-
-// Called when the plugin is initialized
+/// @brief Called when the plugin is initialized
 gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata)
 {
     llm_plugin = g_new(LLMPlugin, 1);
@@ -50,9 +47,9 @@ gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata)
     
     // Add the panel to the notebook
     llm_plugin->page_number = gtk_notebook_append_page(
-	    GTK_NOTEBOOK(llm_plugin->geany_data->main_widgets->sidebar_notebook),
-	    llm_plugin->llm_panel,
-	    gtk_label_new(_("AI Model")));
+            GTK_NOTEBOOK(llm_plugin->geany_data->main_widgets->sidebar_notebook),
+            llm_plugin->llm_panel,
+            gtk_label_new(_("AI Model")));
 
     // --- Connect signals ---
     // Connect GTK signals from your UI elements (e.g., button clicks)
@@ -70,30 +67,23 @@ gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata)
     return TRUE;
 }
 
-// Called when the plugin is unloaded
+/// @brief Called when the plugin is unloaded
 void llm_plugin_cleanup(GeanyPlugin *plugin, gpointer pdata)
 {
-	g_print("LLM Plugin cleanup\n");
-    // --- Clean up resources ---
-    // Destroy your GTK UI elements
-    // Free allocated memory
-    // Clean up libcurl, gettext, etc.
-
+    g_print("LLM Plugin cleanup\n");
     if (llm_plugin)
     {
-	if (llm_plugin->llm_args)
-	    g_free(llm_plugin->llm_args);
+        g_free(llm_plugin->llm_args);
         if (llm_plugin->llm_panel)
             gtk_widget_destroy(llm_plugin->llm_panel);
-            
         g_free(llm_plugin);
         llm_plugin = NULL;
     }
 
-    // curl_global_cleanup();
+    curl_global_cleanup();
 }
 
-// Function to create the configuration widget for the plugin
+/// @brief Function to create the configuration widget for the plugin
 GtkWidget *llm_plugin_configure(GeanyPlugin *plugin, GtkDialog *dialog, gpointer pdata)
 {
     GtkWidget *vbox; // Main container for the configuration options
@@ -154,12 +144,12 @@ GtkWidget *llm_plugin_configure(GeanyPlugin *plugin, GtkDialog *dialog, gpointer
     return vbox;
 }
 
-
+/// @brief Load the module
 void geany_load_module(GeanyPlugin *plugin) 
 {
-	main_locale_init(LOCALEDIR, GETTEXT_PACKAGE);
-	curl_global_init(CURL_GLOBAL_ALL);
-	/* Step 1: Set metadata */
+        main_locale_init(LOCALEDIR, GETTEXT_PACKAGE);
+        curl_global_init(CURL_GLOBAL_ALL);
+        /* Step 1: Set metadata */
     plugin->info->name = GEANY_LLM_PLUGIN_NAME;
     plugin->info->description = GEANY_LLM_PLUGIN_DESCRIPTION;
     plugin->info->version = GEANY_LLM_PLUGIN_VERSION;
@@ -174,6 +164,7 @@ void geany_load_module(GeanyPlugin *plugin)
     GEANY_PLUGIN_REGISTER(plugin, 225);
 }
 
+/// @brief Handle clear button click event
 static void on_input_clear_clicked (GtkButton *button, gpointer user_data)
 {
     LLMPlugin *llm_plugin = (LLMPlugin *)user_data;    
@@ -183,27 +174,31 @@ static void on_input_clear_clicked (GtkButton *button, gpointer user_data)
     gtk_entry_set_text(GTK_ENTRY(llm_plugin->input_text_entry), "");
 }
 
+/// @brief Handle send button click event
 static void on_input_send_clicked (GtkButton *button,
                    gpointer   user_data)
 {
     LLMPlugin *llm_plugin = (LLMPlugin *)user_data;    
     if (!llm_plugin)
-	return;
+        return;
     
     g_print("Send Button was clicked!\n");
     const gchar *input_text = gtk_entry_get_text(GTK_ENTRY(llm_plugin->input_text_entry));
     gchar *query = g_strdup(input_text);
-    LLMResponse *response = query_llm(llm_plugin, query, llm_plugin->llm_args); 
+    LLMResponse *response = llm_query_completions(llm_plugin, query, llm_plugin->llm_args); 
     g_free(query);
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(llm_plugin->output_text_view));
     if (response->error) {
-	g_print("Failed query: %s\n", response->error);
-	g_free(response->error);
-	return;
+        //g_print("Failed query: %s\n", response->error);
+        gtk_text_buffer_set_text(buffer, response->error, -1); 
+    } else {
+        gtk_text_buffer_set_text(buffer, response->response_text, -1); 
     }
-    
+   
+    llm_free_response(response);
 }
 
-
+/// @brief Create the input part of the plugin window.
 static GtkWidget *create_llm_input_widget(gpointer user_data) {
     // Create the main vertical box
     GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
@@ -241,10 +236,12 @@ static GtkWidget *create_llm_input_widget(gpointer user_data) {
     return main_box;
 }
 
+/// @brief Create the output part of the plugin window.
 static GtkWidget *create_llm_output_widget() 
 {
     GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     GtkWidget *text_view = gtk_text_view_new();
+    llm_plugin->output_text_view = text_view;
     gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(text_view), GTK_WRAP_WORD);
     
     // Create the top row (horizontal box) for label and buttons
@@ -265,22 +262,3 @@ static GtkWidget *create_llm_output_widget()
     
     return main_box;
 }
-
-
-// --- Implement your plugin's features here ---
-
-// Example (conceptual): Function to handle sending a query to the LLM server
-// void on_send_button_clicked(GtkButton *button, gpointer user_data)
-// {
-//     const char *user_query = gtk_entry_get_text(GTK_ENTRY(llm_plugin->input_widget));
-//     // Get editor context using Geany API
-//     // Construct HTTP request with libcurl
-//     // Send request asynchronously
-//     // Handle response and update output_widget
-// }
-
-// Example (conceptual): Function to handle document opening event
-// void on_document_open(GSignalHandlerBypass *bypass, gpointer data)
-// {
-//     // React to a document being opened if needed
-// }

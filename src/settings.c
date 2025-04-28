@@ -4,18 +4,18 @@
 
 static gchar* get_config_path()
 {
-	return  g_build_path(G_DIR_SEPARATOR_S, llm_plugin->geany_data->app->configdir, "plugins", "geanyllm", "geanyllm.conf", NULL);
+    return  g_build_path(G_DIR_SEPARATOR_S, llm_plugin->geany_data->app->configdir, "plugins", "geanyllm", "geanyllm.conf", NULL);
 }
 
 void on_configure_response(GtkDialog *dialog, gint response, gpointer user_data) {
-	
     LLMPlugin *llm_plugin = (LLMPlugin *)user_data;    
-     if (!llm_plugin)
+     if (!llm_plugin) {
         return;
+    }
     
     gchar *config_path = get_config_path();
 
-	if (g_mkdir_with_parents(g_path_get_dirname(config_path), 0755) != 0) {
+    if (g_mkdir_with_parents(g_path_get_dirname(config_path), 0755) != 0) {
         g_print("Error creating config directory: %s\n", g_strerror(errno));
         g_free(config_path);
         return;
@@ -50,14 +50,15 @@ void on_configure_response(GtkDialog *dialog, gint response, gpointer user_data)
 
 void llm_plugin_settings_load(gpointer user_data)
 {
-	LLMPlugin *llm_plugin = (LLMPlugin *)user_data;    
+    LLMPlugin *llm_plugin = (LLMPlugin *)user_data;    
  
-	// Validate
+    // Validate
     if (!llm_plugin || 
-		!llm_plugin->geany_data || 
-		!llm_plugin->geany_data->app ||
-		!llm_plugin->geany_data->app->configdir)
+        !llm_plugin->geany_data || 
+        !llm_plugin->geany_data->app ||
+        !llm_plugin->geany_data->app->configdir) {
         return;
+    }
    
     gchar *config_path = get_config_path();
     GKeyFile *key_file = g_key_file_new();

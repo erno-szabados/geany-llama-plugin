@@ -2,202 +2,146 @@
 #include <stdlib.h>
 #include <string.h>
 #include <glib.h>
-#include <json-glib/json-glib.h> // libjson-glib-dev
+#include <json-glib/json-glib.h> // dependency: libjson-glib-dev
 #include <curl/curl.h>
 
 #include "plugin.h"
 #include "llm.h"
 
-void free_llm_response(LLMResponse *response);
-
-gboolean populate_llm_response(LLMResponse *response, const gchar *raw_json, GError **error);
-
-static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp);
-
-// Function to query LLM server
-// Fix the following function to properly use host and port from llm_server_url
-LLMResponse *query_llm(LLMPlugin *plugin, const gchar *query, const LLMArgs *args) {
-    CURL *curl;
-    CURLcode res;
-    GUri *uri = NULL;
-    gchar *uri_string = NULL;
-    gchar *json_payload = NULL;
-    GError *error = NULL;
-    LLMResponse *response = g_new(LLMResponse, 1); // Initialize response struct
-
-    // Variables for extracted host and port
-    gchar *extracted_host = NULL;
-    gint extracted_port = -1;
-    gchar *temp_uri_string = NULL;
-    GUri *temp_uri = NULL;
-
-
-    // Initialize libcurl
-    curl = curl_easy_init();
-    if (!curl) {
-        fprintf(stderr, "curl_easy_init() failed\n");
-        return response; // Return empty response on failure
-    }
-
-    // --- Split host and port from plugin->llm_server_url ---
-    // We prepend a dummy scheme to use g_uri_parse for robust splitting
-    temp_uri_string = g_strdup_printf("dummy://%s", plugin->llm_server_url);
-    if (!temp_uri_string) {
-         fprintf(stderr, "Failed to allocate memory for temporary URI string\n");
-         curl_easy_cleanup(curl);
-         return response;
-    }
-
-    temp_uri = g_uri_parse(temp_uri_string, G_URI_FLAGS_NONE, &error);
-    g_free(temp_uri_string); // Free the temporary string immediately
-
-    if (error) {
-        g_printerr("Error parsing LLM server URL '%s': %s\n", plugin->llm_server_url, error->message);
-        g_clear_error(&error);
-        curl_easy_cleanup(curl);
-        return response;
-    }
-
-    // Extract host and port
-    extracted_host = (gchar*)g_uri_get_host(temp_uri); // g_uri_get_host returns a new string
-    extracted_port = g_uri_get_port(temp_uri);
-
-    // Check if host extraction was successful
-    if (!extracted_host) {
-        g_printerr("Could not extract host from LLM server URL '%s'\n", plugin->llm_server_url);
-        g_object_unref(temp_uri);
-        curl_easy_cleanup(curl);
-        return response;
-    }
-
-    // We are done with the temporary URI object
-    g_object_unref(temp_uri);
-
-    // --- Construct the JSON payload using GLib ---
-    // Basic escaping for quotes in prompt. For full JSON safety,
-    // you might need a proper JSON library or more robust escaping.
-    gchar *escaped_query = g_strescape(query, "\"\\");
-
-    json_payload = g_strdup_printf("{"
-                                     "\"model\": \"%s\","
-                                     "\"prompt\": \"%s\","
-                                     "\"max_tokens\": %d,"
-                                     "\"temperature\": %.2f"
-                                     "}",
-                                     args->model, escaped_query, args->max_tokens, args->temperature);
-
-    g_free(escaped_query); // Free the escaped query string
-
-    if (!json_payload) {
-         fprintf(stderr, "Failed to allocate memory for JSON payload\n");
-         g_free(extracted_host); // Free extracted host
-         curl_easy_cleanup(curl);
-         return response;
-    }
-
-
-    // --- Construct the full request URL using g_uri_build with separated host and port ---
-    const gchar *scheme = "http"; // Assuming http for the LLM server connection
-    const gchar *path = "/v1/completions";
-    const gchar *userinfo = NULL; // Assuming no userinfo for this endpoint
-
-    uri = g_uri_build (G_URI_FLAGS_NONE,
-                       scheme,
-                       userinfo,
-                       extracted_host, // Use the extracted host
-                       extracted_port, // Use the extracted port
-                       path,
-                       NULL, // No query parameters for this path
-                       NULL); // No fragment for this path
-
-    // Free the extracted host string after using it in g_uri_build
-    g_free(extracted_host);
-
-    // Check if URI building was successful
-    if (uri == NULL) {
-        // g_uri_build sets the error if it fails, but we check explicitly too
-        g_printerr ("Error building final HTTP URI: %s\n", error ? error->message : "unknown error");
-        g_clear_error (&error);
-        g_free(json_payload);
-        curl_easy_cleanup(curl);
-        return response;
-    }
-
-    // Convert the GUri back to a string for curl
-    uri_string = g_uri_to_string(uri);
-
-    // We are done with the GUri object
-    g_object_unref(uri);
-
-    if (!uri_string) {
-        fprintf(stderr, "Failed to convert URI to string\n");
-        g_free(json_payload);
-        curl_easy_cleanup(curl);
-        return response;
-    }
-    
-    GString *response_data = g_string_new(NULL);
-
-
-    // --- Set cURL options ---
-    curl_easy_setopt(curl, CURLOPT_URL, uri_string);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_payload);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-      curl_easy_setopt(curl, CURLOPT_WRITEDATA, response_data);
-
-    // Set HTTP headers
-    struct curl_slist *headers = NULL;
-    headers = curl_slist_append(headers, "Content-Type: application/json");
-    // Add other headers as needed, e.g., Authorization
-    // headers = curl_slist_append(headers, "Authorization: Bearer YOUR_API_KEY");
-
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-
-
-    // --- Perform the request ---
-    res = curl_easy_perform(curl);
-
-    // --- Check for errors ---
-    if (res != CURLE_OK) {
-            g_warning("curl_easy_perform() failed: %s", curl_easy_strerror(res));
-        } else {
-            // Populate the response struct
-            if (populate_llm_response(response, response_data->str, &error)) {
-                g_print("Response Text: %s\n", response->response_text);
-                g_print("Error: %s\n", response->error ? response->error : "No error");
-                g_print("Raw JSON: %s\n", response->raw_json);
-            } else {
-                g_warning("Error parsing JSON: %s", error->message);
-                g_clear_error(&error);
-            }
-        }
-
-        // Cleanup
-    curl_easy_cleanup(curl);
-    g_string_free(response_data, TRUE);
-    free_llm_response(response);
-    g_free(json_payload);       // Free GLib-allocated memory for payload
-    g_free(uri_string);         // Free GLib-allocated memory for URI string
-
-    return response;
+/// @brief strdup helper
+static gchar* safe_strdup(const gchar *str) {
+    return str ? g_strdup(str) : NULL;
 }
 
-// Callback function for writing response data
-static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp) {
+/// @brief Callback function for writing response data.
+static size_t write_callback(void *contents, size_t size, size_t nmemb, void *userp) {
     size_t total_size = size * nmemb;
     GString *response = (GString *)userp;
-
     g_string_append_len(response, contents, total_size);
 
     return total_size;
 }
 
-// Function to populate LLMResponse from raw JSON data
-gboolean populate_llm_response(LLMResponse *response, const gchar *raw_json, GError **error) {
-    JsonParser *parser = json_parser_new();
-    gboolean success = json_parser_load_from_data(parser, raw_json, -1, error);
+/// @brief Construct server URI from base uri and path
+static gchar* construct_server_uri_string(const gchar* server_base_uri, const gchar *path)
+{
+    if (!server_base_uri || !path) {
+        return NULL;
+    }
+    
+    return g_strjoin(NULL, server_base_uri, path, NULL);
+}
 
-    if (!success) {
+/// @brief Construct the JSON request payload using json-glib for the completion endpoint
+static gchar* construct_completion_json_payload(const gchar* query, const LLMArgs* args) {
+    JsonBuilder* builder = json_builder_new();
+
+    json_builder_begin_object(builder);
+
+    json_builder_set_member_name(builder, "model");
+    json_builder_add_string_value(builder, args->model);
+
+    json_builder_set_member_name(builder, "prompt");
+    json_builder_add_string_value(builder, query);
+
+    json_builder_set_member_name(builder, "max_tokens");
+    json_builder_add_int_value(builder, args->max_tokens);
+
+    json_builder_set_member_name(builder, "temperature");
+    json_builder_add_double_value(builder, args->temperature);
+
+    json_builder_end_object(builder);
+
+    JsonGenerator* generator = json_generator_new();
+    JsonNode* root = json_builder_get_root(builder);
+    json_generator_set_root(generator, root);
+
+    gchar* json_payload = json_generator_to_data(generator, NULL);
+
+    g_object_unref(generator);
+    json_node_free(root);
+    g_object_unref(builder);
+
+    return json_payload;
+}
+
+/// @brief Construct the JSON request payload using json-glib for the chat completion endpoint
+static gchar* construct_chat_completion_json_payload(const gchar* query, const LLMArgs* args) {
+    JsonBuilder* builder = json_builder_new();
+
+    // Begin the root object
+    json_builder_begin_object(builder);
+
+    // Add "model" field
+    json_builder_set_member_name(builder, "model");
+    json_builder_add_string_value(builder, args->model);
+
+    // Add "messages" array
+    json_builder_set_member_name(builder, "messages");
+    json_builder_begin_array(builder);
+    
+    // Add "system" message
+    json_builder_begin_object(builder);
+    json_builder_set_member_name(builder, "role");
+    json_builder_add_string_value(builder, "system");
+    json_builder_set_member_name(builder, "content");
+    json_builder_add_string_value(builder, args->system_instruction); // A predefined instruction in LLMArgs
+    json_builder_end_object(builder);
+
+    // Add "user" message (the query)
+    json_builder_begin_object(builder);
+    json_builder_set_member_name(builder, "role");
+    json_builder_add_string_value(builder, "user");
+    json_builder_set_member_name(builder, "content");
+    json_builder_add_string_value(builder, query);
+    json_builder_end_object(builder);
+
+    // Add more messages from args->messages (if any)
+    for (guint i = 0; i < args->messages_length; ++i) {
+        json_builder_begin_object(builder);
+        json_builder_set_member_name(builder, "role");
+        json_builder_add_string_value(builder, args->messages[i].role);
+        json_builder_set_member_name(builder, "content");
+        json_builder_add_string_value(builder, args->messages[i].content);
+        json_builder_end_object(builder);
+    }
+
+    // End the "messages" array
+    json_builder_end_array(builder);
+
+    // Add "max_tokens" field
+    json_builder_set_member_name(builder, "max_tokens");
+    json_builder_add_int_value(builder, args->max_tokens);
+
+    // Add "temperature" field
+    json_builder_set_member_name(builder, "temperature");
+    json_builder_add_double_value(builder, args->temperature);
+
+    // End the root object
+    json_builder_end_object(builder);
+
+    // Generate the JSON data
+    JsonGenerator* generator = json_generator_new();
+    JsonNode* root = json_builder_get_root(builder);
+    json_generator_set_root(generator, root);
+
+    gchar* json_payload = json_generator_to_data(generator, NULL);
+
+    // Clean up
+    g_object_unref(generator);
+    json_node_free(root);
+    g_object_unref(builder);
+
+    return json_payload;
+}
+
+
+/// @brief populate LLMResponse from raw JSON data
+static gboolean json_to_response(LLMResponse *response, const gchar *raw_json, GError **error) {
+    memset(response, 0, sizeof(LLMResponse));
+
+    JsonParser *parser = json_parser_new();
+    if (!json_parser_load_from_data(parser, raw_json, -1, error)) {
         g_object_unref(parser);
         return FALSE;
     }
@@ -211,33 +155,145 @@ gboolean populate_llm_response(LLMResponse *response, const gchar *raw_json, GEr
 
     JsonObject *root_object = json_node_get_object(root);
     JsonArray *choices = json_object_get_array_member(root_object, "choices");
+
     if (choices && json_array_get_length(choices) > 0) {
-        JsonObject *first_choice = json_array_get_object_element(choices, 0);
-        const gchar *text = json_object_get_string_member(first_choice, "text");
-        response->response_text = g_strdup(text);
-    } else {
-        response->response_text = NULL;
+        response->response_text = safe_strdup(
+            json_object_get_string_member(json_array_get_object_element(choices, 0), "text")
+        );
     }
 
     if (json_object_has_member(root_object, "error")) {
-        const gchar *error_message = json_object_get_string_member(root_object, "error");
-        response->error = g_strdup(error_message);
-    } else {
-        response->error = NULL;
+        response->error = safe_strdup(json_object_get_string_member(root_object, "error"));
     }
 
     response->raw_json = g_strdup(raw_json);
 
     g_object_unref(parser);
+    
     return TRUE;
 }
 
-// Clean up the LLMResponse
-void free_llm_response(LLMResponse *response) {
+/// @brief Execute LLM query using curl to connect to the LLM server
+static gboolean execute_llm_query(const gchar *server_uri, const gchar *json_payload, LLMResponse *response) {
+    GError *error = NULL;
+    if (!response || !server_uri || !json_payload) {
+        return FALSE;
+    }
+    
+    CURL *curl = curl_easy_init();
+    
+    if (!curl) {
+        response->error = g_strdup("Failed to initialize curl.");
+        
+        return FALSE;
+    }
+    
+    GString *response_data = g_string_new(NULL);
+
+    // --- Set cURL options ---
+    curl_easy_setopt(curl, CURLOPT_URL, server_uri);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_payload);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, response_data);
+
+    // Set HTTP headers
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
+    // --- Perform the request ---
+    CURLcode res = curl_easy_perform(curl);
+
+    // --- Check for errors ---
+    if (res != CURLE_OK) {
+        g_warning("cUrl error: %s", curl_easy_strerror(res));
+        g_string_free(response_data, TRUE);
+        curl_easy_cleanup(curl);
+        
+        return FALSE;
+    } else {
+        if (json_to_response(response, response_data->str, &error)) {
+            g_print("Response Text: %s\n", response->response_text);
+            g_print("Error: %s\n", response->error ? response->error : "No error");
+            g_print("Raw JSON: %s\n", response->raw_json);
+        } else {
+            g_warning("Error parsing JSON: %s", error->message);
+            g_clear_error(&error);
+        }
+    }
+    g_string_free(response_data, TRUE);
+    curl_easy_cleanup(curl);
+    
+    return TRUE;
+}
+
+LLMResponse *llm_query_completions(LLMPlugin *plugin, const gchar *query, const LLMArgs *args) {
+
+    GUri *uri = NULL;
+    gchar *json_payload = NULL;
+    LLMResponse *response = g_new(LLMResponse, 1);
+
+    const gchar *path = "/v1/completions";
+    gchar *server_uri = construct_server_uri_string(plugin->llm_server_url, path);
+    if (!server_uri) {
+        response->error = g_strdup("Failed to convert URI to string\n");
+        
+        return response;
+    }
+
+    json_payload = construct_completion_json_payload(query, args);
+    if (!json_payload) {
+        g_free(server_uri);
+        response->error = g_strdup("failed to construct json payload.");
+
+        return response;
+    }
+
+    execute_llm_query(server_uri, json_payload, response);
+
+    g_free(json_payload);
+    g_free(server_uri);
+
+    return response;
+}
+
+LLMResponse *llm_query_chat_completions(LLMPlugin *plugin, const gchar *query, const LLMArgs *args) {
+
+    GUri *uri = NULL;
+    gchar *json_payload = NULL;
+    LLMResponse *response = g_new(LLMResponse, 1);
+
+    const gchar *path = "/v1/chat/completions";
+    gchar *server_uri = construct_server_uri_string(plugin->llm_server_url, path);
+    if (!server_uri) {
+        response->error = g_strdup("Failed to convert URI to string\n");
+        
+        return response;
+    }
+
+    json_payload = construct_chat_completion_json_payload(query, args);
+    if (!json_payload) {
+        g_free(server_uri);
+        response->error = g_strdup("failed to construct json payload.");
+
+        return response;
+    }
+
+    execute_llm_query(server_uri, json_payload, response);
+
+    g_free(json_payload);
+    g_free(server_uri);
+
+    return response;
+}
+
+void llm_free_response(LLMResponse *response) {
     g_free(response->response_text);
     g_free(response->error);
     g_free(response->raw_json);
 }
+
+
 
 
 

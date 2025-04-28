@@ -1,21 +1,34 @@
 #ifndef __TYPES_H__
 #define __TYPES_H__
 
-// Struct for LLM arguments
+/**
+ * Shared plugin types.
+ */
+
 typedef struct {
-    gchar *model;
+    const gchar* role;    // "user", "assistant", "system"
+    const gchar* content; // The message content
+} ChatMessage;
+
+/// @brief LLM arguments descriptor
+typedef struct {
+    gchar* model;
+    guint max_tokens;
     gdouble temperature;
-    gint max_tokens;
+    const gchar* system_instruction; // E.g., "You are a helpful assistant."
+    ChatMessage* messages;           // Array of previous messages
+    guint messages_length;           // Number of messages
 } LLMArgs;
 
-// Struct for LLM response
+
+/// @brief LLM response descriptor
 typedef struct {
     gchar *response_text;
     gchar *error;
     gchar *raw_json;
 } LLMResponse;
 
-// Structure to hold your plugin's data
+/// @brief Plugin data descriptor
 typedef struct
 {
     GeanyPlugin *geany_plugin;
@@ -26,7 +39,8 @@ typedef struct
     
     GtkWidget *input_widget; // Widget for user input
     GtkWidget *output_widget; // Widget for LLM output
-    GtkWidget *input_text_entry; // User text view (entry)
+    GtkWidget *input_text_entry; // User text view (entry for now)
+    GtkWidget *output_text_view; // Output text area
     
     GtkWidget *url_entry; // Entry for the LLM server URL
     GtkWidget *model_entry; // Entry for the LLM model
