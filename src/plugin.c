@@ -51,19 +51,6 @@ gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata)
             llm_plugin->llm_panel,
             gtk_label_new(_("AI Model")));
 
-    // --- Connect signals ---
-    // Connect GTK signals from your UI elements (e.g., button clicks)
-    // Connect Geany signals to react to editor events (e.g., file opened)
-
-    // Example (conceptual): Connect a button click signal
-    // g_signal_connect(button, "clicked", G_CALLBACK(on_send_button_clicked), NULL);
-
-    // geany_signal_connect(geany_plugin->geany_data, "document-open", &on_document_open, NULL);
-
-
-    // --- Initialize other plugin components ---
-    // Initialize libcurl, gettext, etc. if needed at startup
-    // curl_global_init(CURL_GLOBAL_DEFAULT);
     return TRUE;
 }
 
@@ -177,19 +164,18 @@ static void on_input_clear_clicked (GtkButton *button, gpointer user_data)
 /// @brief Handle send button click event in a separate thread.
 static void on_input_send_clicked(GtkButton *button, gpointer user_data) {
     LLMPlugin *llm_plugin = (LLMPlugin *)user_data;
-    if (!llm_plugin) {
-        
+    if (!llm_plugin)
         return;
-    }
-
-    g_print("Send Button was clicked!\n");
 
     const gchar *input_text = gtk_entry_get_text(GTK_ENTRY(llm_plugin->input_text_entry));
     if (!input_text || *input_text == '\0') {
         g_print("Input text is empty!\n");
-        
         return;
     }
+
+    // Show and start the spinner
+    gtk_widget_show(llm_plugin->spinner);
+    gtk_spinner_start(GTK_SPINNER(llm_plugin->spinner));
 
     // Create a copy of the query and thread data
     gchar *query = g_strdup(input_text);
@@ -201,6 +187,11 @@ static void on_input_send_clicked(GtkButton *button, gpointer user_data) {
     g_thread_new("llm-thread", llm_thread_func, thread_data);
 }
 
+/// @brief Invoke the same functionality as the send button click
+static void on_input_enter_activate(GtkEntry *entry, gpointer user_data) {
+    on_input_send_clicked(GTK_BUTTON(NULL), user_data);
+}
+
 /// @brief Create the input part of the plugin window.
 static GtkWidget *create_llm_input_widget(gpointer user_data) {
     // Create the main vertical box
@@ -210,7 +201,7 @@ static GtkWidget *create_llm_input_widget(gpointer user_data) {
     GtkWidget *top_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
 
     // Create the label
-    GtkWidget *input_label = gtk_label_new(_("Question"));
+    GtkWidget *input_label = gtk_label_new(_("Request"));
 
     // Create the "Clear" button with an icon
     GtkWidget *clear_button = gtk_button_new();
@@ -232,6 +223,8 @@ static GtkWidget *create_llm_input_widget(gpointer user_data) {
     // Create a text view (textarea) for the query
     GtkWidget *text_entry = gtk_entry_new();
     llm_plugin->input_text_entry = text_entry;
+    g_signal_connect(llm_plugin->input_text_entry, "activate", G_CALLBACK(on_input_enter_activate), llm_plugin);
+    
     // Add the top row and text view to the main box
     gtk_box_pack_start(GTK_BOX(main_box), top_row, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(main_box), text_entry, TRUE, TRUE, 0);
@@ -263,5 +256,12 @@ static GtkWidget *create_llm_output_widget()
     gtk_container_add(GTK_CONTAINER(scrollwin), text_view);
     gtk_box_pack_start(GTK_BOX(main_box), scrollwin, TRUE, TRUE, 0);    
     
+    GtkWidget *spinner = gtk_spinner_new();
+    gtk_widget_set_halign(spinner, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(spinner, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(main_box), spinner, FALSE, FALSE, 0);  
+    gtk_widget_hide(spinner); // Hide it initially
+    llm_plugin->spinner = spinner; // Save the spinner in the plugin struct
+
     return main_box;
 }

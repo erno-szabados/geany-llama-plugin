@@ -43,6 +43,7 @@ typedef struct
     GtkWidget *output_widget; // Widget for LLM output
     GtkWidget *input_text_entry; // User text view (entry for now)
     GtkWidget *output_text_view; // Output text area
+    GtkWidget *spinner; // LLM interaction indicator
     
     GtkWidget *url_entry; // Entry for the LLM server URL
     GtkWidget *model_entry; // Entry for the LLM model

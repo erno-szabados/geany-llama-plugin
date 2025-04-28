@@ -318,14 +318,17 @@ gboolean llm_update_ui(LLMResponse *response) {
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(llm_plugin->output_text_view));
 
     if (response->error) {
-        gtk_text_buffer_set_text(buffer, response->error, -1); 
+        gtk_text_buffer_set_text(buffer, response->error, -1);
     } else {
-        gtk_text_buffer_set_text(buffer, response->response_text, -1); 
+        gtk_text_buffer_set_text(buffer, response->response_text, -1);
     }
 
-    llm_free_response(response);
+    gtk_spinner_stop(GTK_SPINNER(llm_plugin->spinner));
+    gtk_widget_hide(llm_plugin->spinner);
 
-    return FALSE; // Remove the idle function from the main loop
+    llm_free_response(response);
+    
+    return FALSE;
 }
 
 
