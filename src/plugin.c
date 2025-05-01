@@ -24,7 +24,8 @@ gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata)
     llm_plugin->geany_data = plugin->geany_data;
     llm_plugin->llm_panel = NULL;
     llm_plugin->llm_server_url = NULL;
-    llm_plugin->llm_args = g_new(LLMArgs, 1); 
+    llm_plugin->proxy_url = NULL;
+    llm_plugin->llm_args = g_new0(LLMArgs, 1); 
     g_print("LLM Plugin init\n");
 
     // TODO: make them configurable
@@ -64,6 +65,8 @@ void llm_plugin_cleanup(GeanyPlugin *plugin, gpointer pdata)
     if (llm_plugin)
     {
         g_free(llm_plugin->llm_args);
+        g_free(llm_plugin->llm_server_url);
+        g_free(llm_plugin->proxy_url);
         if (llm_plugin->llm_panel)
             gtk_widget_destroy(llm_plugin->llm_panel);
         g_free(llm_plugin);
@@ -78,6 +81,7 @@ GtkWidget *llm_plugin_configure(GeanyPlugin *plugin, GtkDialog *dialog, gpointer
 {
     GtkWidget *vbox = NULL; // Main container for the configuration options
     GtkWidget *url_label = NULL; 
+    GtkWidget *proxy_label = NULL;
     GtkWidget *model_label = NULL; 
 
     // Create a vertical box to hold the configuration widgets
@@ -87,7 +91,6 @@ GtkWidget *llm_plugin_configure(GeanyPlugin *plugin, GtkDialog *dialog, gpointer
     // Set label alignment to the left
     gtk_widget_set_halign(url_label, GTK_ALIGN_START);
 
-    g_print("Create URL entry\n");
     // Create an entry field for the URL
     llm_plugin->url_entry = gtk_entry_new();
     if (llm_plugin->llm_server_url)
@@ -100,9 +103,21 @@ GtkWidget *llm_plugin_configure(GeanyPlugin *plugin, GtkDialog *dialog, gpointer
     }
     
     gtk_entry_set_placeholder_text(GTK_ENTRY(llm_plugin->url_entry), "e.g., http://localhost:8080/completion");
-
-
-    g_print("Create model entry\n");
+    
+    proxy_label = gtk_label_new(_("Proxy (optional):"));
+    gtk_widget_set_halign(proxy_label, GTK_ALIGN_START);
+    // Create an entry field for the Proxy
+    llm_plugin->proxy_entry = gtk_entry_new();
+    if (llm_plugin->proxy_url)
+    {
+        gtk_entry_set_text(GTK_ENTRY(llm_plugin->proxy_entry), llm_plugin->proxy_url);
+    }
+    else
+    {
+         gtk_entry_set_text(GTK_ENTRY(llm_plugin->proxy_entry), "");
+    }
+    
+    gtk_entry_set_placeholder_text(GTK_ENTRY(llm_plugin->proxy_entry), "e.g., http://my.proxy.com:1080");
 
     // Create an entry field for the Model
     model_label = gtk_label_new(_("LLM Model:"));
@@ -124,6 +139,9 @@ GtkWidget *llm_plugin_configure(GeanyPlugin *plugin, GtkDialog *dialog, gpointer
     // Pack the label and entry into the vertical box
     gtk_box_pack_start(GTK_BOX(vbox), url_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), llm_plugin->url_entry, FALSE, FALSE, 0);
+    
+    gtk_box_pack_start(GTK_BOX(vbox), proxy_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), llm_plugin->proxy_entry, FALSE, FALSE, 0);
     
     gtk_box_pack_start(GTK_BOX(vbox), model_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), llm_plugin->model_entry, FALSE, FALSE, 0);

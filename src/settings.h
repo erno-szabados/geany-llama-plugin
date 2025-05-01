@@ -5,6 +5,7 @@
 
 #define LLM_SERVER_URL_KEY "llm_server_url"
 #define LLM_ARGS_MODEL_KEY "model"
+#define PROXY_URL_KEY "proxy"
 
 /**
  * Functions to load and save the plugin configuration.

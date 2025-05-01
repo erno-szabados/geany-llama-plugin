@@ -29,16 +29,23 @@ void on_configure_response(GtkDialog *dialog, gint response, gpointer user_data)
     const gchar *url = gtk_entry_get_text(GTK_ENTRY(llm_plugin->url_entry));
     g_free(llm_plugin->llm_server_url);
     llm_plugin->llm_server_url = g_strdup(url);
+    g_strstrip(llm_plugin->llm_server_url);
+    
+    const gchar *proxy_url = gtk_entry_get_text(GTK_ENTRY(llm_plugin->proxy_entry));
+    g_free(llm_plugin->proxy_url);
+    llm_plugin->proxy_url = g_strdup(proxy_url);
+    g_strstrip(llm_plugin->proxy_url);
 
     const gchar *model = gtk_entry_get_text(GTK_ENTRY(llm_plugin->model_entry));
     g_free(llm_plugin->llm_args->model);
     llm_plugin->llm_args->model = g_strdup(model);
+    g_strstrip(llm_plugin->llm_args->model);
 
     GError *error = NULL;
     GKeyFile *key_file = g_key_file_new();
     g_key_file_set_string(key_file, "General", LLM_SERVER_URL_KEY, llm_plugin->llm_server_url);
     g_key_file_set_string(key_file, "General", LLM_ARGS_MODEL_KEY, llm_plugin->llm_args->model);
-
+    g_key_file_set_string(key_file, "General", PROXY_URL_KEY, llm_plugin->proxy_url);
 
      // Save settings to a file
     if (!g_key_file_save_to_file(key_file, config_path, &error)) {
@@ -89,7 +96,14 @@ void llm_plugin_settings_load(gpointer user_data)
         g_error_free(error);
         error = NULL;
     }
-
+    
+    llm_plugin->proxy_url = g_key_file_get_string(key_file, "General", PROXY_URL_KEY, &error);
+    if (!llm_plugin->proxy_url) {
+        g_print("Error reading %s: %s\n", PROXY_URL_KEY, error->message);
+        g_error_free(error);
+        error = NULL;
+    }
+    
     llm_plugin->llm_args->model = g_key_file_get_string(key_file, "General", LLM_ARGS_MODEL_KEY, &error);
     if (!llm_plugin->llm_args->model) {
         g_print("Error reading %s: %s\n", LLM_ARGS_MODEL_KEY, error->message);

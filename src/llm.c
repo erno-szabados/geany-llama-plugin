@@ -180,7 +180,7 @@ static gboolean json_to_response(LLMResponse *response, const gchar *raw_json, G
 }
 
 /// @brief Execute LLM query using curl to connect to the LLM server
-static gboolean execute_llm_query(const gchar *server_uri, const gchar *json_payload, LLMResponse *response) {
+static gboolean execute_llm_query(const gchar *server_uri, const gchar *proxy_url, const gchar *json_payload, LLMResponse *response) {
     GError *error = NULL;
     if (!response || !server_uri || !json_payload) {
         return FALSE;
@@ -201,6 +201,9 @@ static gboolean execute_llm_query(const gchar *server_uri, const gchar *json_pay
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_payload);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, response_data);
+    if (!IS_NULL_OR_EMPTY(proxy_url)) {
+        curl_easy_setopt(curl, CURLOPT_PROXY, proxy_url);
+    }
 
     // Set HTTP headers
     struct curl_slist *headers = NULL;
@@ -255,7 +258,7 @@ LLMResponse *llm_query_completions(LLMPlugin *plugin, const gchar *query, const 
         return response;
     }
 
-    execute_llm_query(server_uri, json_payload, response);
+    execute_llm_query(server_uri, plugin->proxy_url, json_payload, response);
 
     g_free(json_payload);
     g_free(server_uri);
@@ -285,7 +288,7 @@ LLMResponse *llm_query_chat_completions(LLMPlugin *plugin, const gchar *query, c
         return response;
     }
 
-    execute_llm_query(server_uri, json_payload, response);
+    execute_llm_query(server_uri, llm_plugin->proxy_url, json_payload, response);
 
     g_free(json_payload);
     g_free(server_uri);

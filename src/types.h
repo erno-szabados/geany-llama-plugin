@@ -1,11 +1,11 @@
 #ifndef __TYPES_H__
 #define __TYPES_H__
 
+#define IS_NULL_OR_EMPTY(str) ((str) == NULL || (str)[0] == '\0')
+
 /**
  * Shared plugin types.
  */
-
-
 
 typedef struct {
     const gchar* role;    // "user", "assistant", "system"
@@ -46,12 +46,14 @@ typedef struct
     GtkWidget *spinner; // LLM interaction indicator
     
     GtkWidget *url_entry; // Entry for the LLM server URL
+    GtkWidget *proxy_entry;
     GtkWidget *model_entry; // Entry for the LLM model
     
     gint page_number; // Tabindex
     
     // Plugin settings
      gchar *llm_server_url;
+     gchar *proxy_url;
 
     // LLM arguments
     LLMArgs *llm_args; // LLM parameters (model, temp, max_token)
