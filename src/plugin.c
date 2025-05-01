@@ -28,6 +28,7 @@ gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata)
     // TODO: make them configurable
     llm_plugin->llm_args->max_tokens = 1024;
     llm_plugin->llm_args->temperature = 0.8f;
+    llm_plugin->llm_args->model = NULL;
 
     llm_plugin_settings_load(llm_plugin);
 
@@ -73,18 +74,18 @@ void llm_plugin_cleanup(GeanyPlugin *plugin, gpointer pdata)
 /// @brief Function to create the configuration widget for the plugin
 GtkWidget *llm_plugin_configure(GeanyPlugin *plugin, GtkDialog *dialog, gpointer pdata)
 {
-    GtkWidget *vbox; // Main container for the configuration options
-    GtkWidget *url_label; 
-    GtkWidget *model_label; 
+    GtkWidget *vbox = NULL; // Main container for the configuration options
+    GtkWidget *url_label = NULL; 
+    GtkWidget *model_label = NULL; 
 
     // Create a vertical box to hold the configuration widgets
     vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_container_set_border_width(GTK_CONTAINER(vbox), 10); // Add some padding
-
     url_label = gtk_label_new(_("LLM Server URL:"));
     // Set label alignment to the left
     gtk_widget_set_halign(url_label, GTK_ALIGN_START);
 
+    g_print("Create URL entry\n");
     // Create an entry field for the URL
     llm_plugin->url_entry = gtk_entry_new();
     if (llm_plugin->llm_server_url)
@@ -98,12 +99,15 @@ GtkWidget *llm_plugin_configure(GeanyPlugin *plugin, GtkDialog *dialog, gpointer
     
     gtk_entry_set_placeholder_text(GTK_ENTRY(llm_plugin->url_entry), "e.g., http://localhost:8080/completion");
 
+
+    g_print("Create model entry\n");
+
     // Create an entry field for the Model
     model_label = gtk_label_new(_("LLM Model:"));
     gtk_widget_set_halign(model_label, GTK_ALIGN_START);
 
     llm_plugin->model_entry = gtk_entry_new();
-    if (llm_plugin->llm_args->model)
+    if (llm_plugin->llm_args && llm_plugin->llm_args->model)
     {
         gtk_entry_set_text(GTK_ENTRY(llm_plugin->model_entry), llm_plugin->llm_args->model);
     }
@@ -152,7 +156,7 @@ void geany_load_module(GeanyPlugin *plugin)
 }
 
 /// @brief Handle clear button click event
-static void on_input_clear_clicked (GtkButton *button, gpointer user_data)
+static void on_input_clear_clicked(GtkButton *button, gpointer user_data)
 {
     LLMPlugin *llm_plugin = (LLMPlugin *)user_data;    
      if (!llm_plugin)

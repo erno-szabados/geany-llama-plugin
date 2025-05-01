@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: geany-llm-plugin 0.1\n"
 "Report-Msgid-Bugs-To: erno.szabados@windowslive.com\n"
-"POT-Creation-Date: 2025-04-27 15:16+0200\n"
+"POT-Creation-Date: 2025-04-30 21:37+0200\n"
 "PO-Revision-Date: 2025-04-27 15:25+0200\n"
 "Last-Translator: Szabados Ernő <erno.szabados@windowslive.com>\n"
 "Language-Team: Hungarian <translation-team-hu@lists.sourceforge.net>\n"
@@ -17,14 +17,30 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: src/plugin.c:78
+#: src/plugin.c:52
+msgid "AI Model"
+msgstr ""
+
+#: src/plugin.c:84
 msgid "LLM Server URL:"
 msgstr "LLM Server URL:"
 
-#: src/plugin.h:7
+#: src/plugin.c:102
+msgid "LLM Model:"
+msgstr ""
+
+#: src/plugin.c:204
+msgid "Request"
+msgstr ""
+
+#: src/plugin.c:247
+msgid "Answer"
+msgstr ""
+
+#: src/plugin.h:9
 msgid "LLama Assistant"
 msgstr "LLama Assistant"
 
-#: src/plugin.h:10
+#: src/plugin.h:12
 msgid "Integrates LLM capabilities into Geany."
 msgstr "Integrates LLM capabilities into Geany."
