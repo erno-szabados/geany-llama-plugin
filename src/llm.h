@@ -10,9 +10,10 @@
 /// @brief Pass the LLM completions endpoint the specified query and return the response.
 /// @param LLMPlugin *plugin
 /// @param const gchar *query
+/// @param const gchar *current_document
 /// @param const LLMArgs *args
 /// @return LLMResponse the response on success, empty or error response on error.
-LLMResponse *llm_query_completions(LLMPlugin *plugin, const gchar *query, const LLMArgs *args);
+LLMResponse *llm_query_completions(LLMPlugin *plugin, const gchar *query, const gchar *current_document, const LLMArgs *args);
 
 /// @brief Pass the LLM chat completions endpoint the specified query and return the response.
 /// @param LLMPlugin *plugin

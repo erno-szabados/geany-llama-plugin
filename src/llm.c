@@ -33,7 +33,7 @@ static gchar* construct_server_uri_string(const gchar* server_base_uri, const gc
 }
 
 /// @brief Construct the JSON request payload using json-glib for the completion endpoint
-static gchar* construct_completion_json_payload(const gchar* query, const LLMArgs* args) {
+static gchar* construct_completion_json_payload(const gchar* query, const gchar *current_document, const LLMArgs* args) {
     JsonBuilder* builder = json_builder_new();
 
     json_builder_begin_object(builder);
@@ -41,8 +41,13 @@ static gchar* construct_completion_json_payload(const gchar* query, const LLMArg
     json_builder_set_member_name(builder, "model");
     json_builder_add_string_value(builder, args->model);
 
+    GString *full_prompt = g_string_new("Analyze the following document:\n\n");
+    g_string_append(full_prompt, current_document);
+    g_string_append(full_prompt, "\n\nBased on the document, give a concise answer the following question:\n");
+    g_string_append(full_prompt, query);
+
     json_builder_set_member_name(builder, "prompt");
-    json_builder_add_string_value(builder, query);
+    json_builder_add_string_value(builder, full_prompt->str);
 
     json_builder_set_member_name(builder, "max_tokens");
     json_builder_add_int_value(builder, args->max_tokens);
@@ -61,6 +66,7 @@ static gchar* construct_completion_json_payload(const gchar* query, const LLMArg
     g_object_unref(generator);
     json_node_free(root);
     g_object_unref(builder);
+    g_string_free(full_prompt, TRUE);
 
     return json_payload;
 }
@@ -227,7 +233,7 @@ static gboolean execute_llm_query(const gchar *server_uri, const gchar *json_pay
     return TRUE;
 }
 
-LLMResponse *llm_query_completions(LLMPlugin *plugin, const gchar *query, const LLMArgs *args) {
+LLMResponse *llm_query_completions(LLMPlugin *plugin, const gchar *query, const gchar *current_document, const LLMArgs *args){
 
     GUri *uri = NULL;
     gchar *json_payload = NULL;
@@ -241,7 +247,7 @@ LLMResponse *llm_query_completions(LLMPlugin *plugin, const gchar *query, const 
         return response;
     }
 
-    json_payload = construct_completion_json_payload(query, args);
+    json_payload = construct_completion_json_payload(query, current_document, args);
     if (!json_payload) {
         g_free(server_uri);
         response->error = g_strdup("failed to construct json payload.");
@@ -298,13 +304,15 @@ gpointer llm_thread_func(gpointer data) {
 
     LLMPlugin *llm_plugin = thread_data->llm_plugin;
     gchar *query = thread_data->query;
+    gchar *current_document = thread_data->current_document;
 
     // Call the blocking function in the worker thread
-    LLMResponse *response = llm_query_completions(llm_plugin, query, llm_plugin->llm_args);
+    LLMResponse *response = llm_query_completions(llm_plugin, query, current_document, llm_plugin->llm_args);
 
     // Free the query as it's no longer needed
     g_free(query);
-
+    g_free(thread_data->current_document);
+    
     // Pass the response back to the main thread
     gdk_threads_add_idle((GSourceFunc)llm_update_ui, response);
 

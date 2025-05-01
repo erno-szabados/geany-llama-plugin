@@ -61,6 +61,7 @@ typedef struct
 typedef struct {
     LLMPlugin *llm_plugin;
     gchar *query;
+    gchar *current_document;
 } ThreadData;
 
 #endif // __TYPES_H__

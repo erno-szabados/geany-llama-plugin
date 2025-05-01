@@ -3,6 +3,8 @@
 #include "plugin.h"
 #include "settings.h"
 #include "llm.h"
+#include <Scintilla.h>
+#include <SciLexer.h>
 
 #ifdef HAVE_CONFIG_H
 # include "config.h"
@@ -17,7 +19,7 @@ LLMPlugin *llm_plugin = NULL;
 /// @brief Called when the plugin is initialized
 gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata)
 {
-    llm_plugin = g_new(LLMPlugin, 1);
+    llm_plugin = g_new0(LLMPlugin, 1);
     llm_plugin->geany_plugin = plugin;
     llm_plugin->geany_data = plugin->geany_data;
     llm_plugin->llm_panel = NULL;
@@ -159,11 +161,42 @@ void geany_load_module(GeanyPlugin *plugin)
 static void on_input_clear_clicked(GtkButton *button, gpointer user_data)
 {
     LLMPlugin *llm_plugin = (LLMPlugin *)user_data;    
-     if (!llm_plugin)
+    if (!llm_plugin) {
         return;
+    }
     g_print("Clear Button was clicked!\n");
     gtk_entry_set_text(GTK_ENTRY(llm_plugin->input_text_entry), "");
 }
+
+
+/// @brief Get the current document as a string.
+/// Remember to g_free(document_content) when done
+static gchar *get_current_document(gpointer user_data)
+{
+    LLMPlugin *llm_plugin = (LLMPlugin *)user_data;
+    if (!llm_plugin) {
+        return NULL;
+    }
+    //GeanyDocument *doc = llm_plugin->geany_data->editor->document;
+    GeanyDocument *doc = document_get_current();
+
+    if (!doc) {
+         g_warning("No active document found.");
+        return NULL;
+    }
+    
+    gsize length = scintilla_send_message(doc->editor->sci, SCI_GETTEXTLENGTH, 0, 0);
+    gchar* document_content = g_malloc(length + 1); // +1 for null-terminator
+    scintilla_send_message(doc->editor->sci, SCI_GETTEXT, length + 1, (sptr_t)document_content);
+    
+    if (!document_content) {
+        g_warning("Failed to allocate memory for document content.");
+        return NULL;
+    }
+
+    return document_content;
+}
+
 
 /// @brief Handle send button click event in a separate thread.
 static void on_input_send_clicked(GtkButton *button, gpointer user_data) {
@@ -183,9 +216,11 @@ static void on_input_send_clicked(GtkButton *button, gpointer user_data) {
 
     // Create a copy of the query and thread data
     gchar *query = g_strdup(input_text);
+    gchar *current_document = get_current_document(llm_plugin);
     ThreadData *thread_data = g_malloc(sizeof(ThreadData));
     thread_data->llm_plugin = llm_plugin;
     thread_data->query = query;
+    thread_data->current_document = current_document;
 
     // Create a new thread to handle the blocking network request
     g_thread_new("llm-thread", llm_thread_func, thread_data);
@@ -269,3 +304,4 @@ static GtkWidget *create_llm_output_widget()
 
     return main_box;
 }
+
