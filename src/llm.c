@@ -14,67 +14,65 @@
 gpointer llm_thread_func(gpointer data)
 {
     ThreadData *thread_data = (ThreadData *)data;
-    if (!thread_data)
-    {
+    if (!thread_data) {
         g_warning("NULL thread_data received\n");
         return NULL;
     }
 
     LLMPlugin *plugin = thread_data->llm_plugin;
-    if (!plugin)
-    {
+    LLMCallbacks *callbacks = thread_data->callbacks;
+    
+    if (!plugin) {
         g_warning("NULL plugin descriptor received.");
+        if (callbacks && callbacks->on_error) {
+            callbacks->on_error("Invalid plugin configuration", callbacks->user_data);
+        }
+        
         g_free(thread_data->query);
         g_free(thread_data->current_document);
+        g_free(callbacks);
         g_free(thread_data);
         return NULL;
     }
 
     gchar *query = thread_data->query;
     gchar *current_document = thread_data->current_document;
-    LLMArgs *args = plugin->llm_args; 
-    LLMResponse response = {0};
+    LLMArgs *args = plugin->llm_args;
 
     const gchar *path = "/v1/completions";
     gchar *json_payload = NULL;
     gchar *server_uri = llm_construct_server_uri_string(plugin->llm_server_url, path);
 
-    if (!server_uri)
-    {
-        g_warning("Failed to construct server URI");
+    if (!server_uri) {
+        if (callbacks && callbacks->on_error) {
+            callbacks->on_error("Failed to construct server URI", callbacks->user_data);
+        }
         goto EXIT;
     }
 
     json_payload = llm_construct_completion_json_payload(query, current_document, args);
-    if (!json_payload)
-    {
-        g_warning("Failed to construct JSON payload");
+    if (!json_payload) {
+        if (callbacks && callbacks->on_error) {
+            callbacks->on_error("Failed to construct JSON payload", callbacks->user_data);
+        }
         goto EXIT;
     }
 
-    if (!llm_execute_query(server_uri, plugin->proxy_url, json_payload, &response))
-    {
-        // Curl level error occurred
-        g_warning("execute_llm_query failed: %s", response.error ? response.error : "Unknown cUrl error");
-
-        if (response.error)
-        {
-            gchar *error_copy = g_strdup(response.error);
-            gdk_threads_add_idle((GSourceFunc)llm_append_to_output_buffer, error_copy);
-        }
-    }
-    else if (response.error)
-    {
-        g_warning("execute_llm_query completed with HTTP/API error: %s", response.error);
-    }
+    // Execute the query with callbacks
+    llm_execute_query(server_uri, plugin->proxy_url, json_payload, callbacks);
     
 EXIT:
-    g_free(response.error); 
     g_free(json_payload);
     g_free(server_uri);
     g_free(query);
     g_free(current_document);
     g_free(thread_data);
+    // Don't free callbacks here as they might still be used in async operations
+    
+    // Free callbacks at the end
+    if (callbacks) {
+        g_free(callbacks);
+    }
 
     return NULL;
 }

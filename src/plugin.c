@@ -6,12 +6,18 @@
 #include <Scintilla.h>
 #include <SciLexer.h>
 
+#include "llm_http.h"
+
 #ifdef HAVE_CONFIG_H
 # include "config.h"
 #endif
 
 static GtkWidget *create_llm_input_widget(gpointer user_data);
 static GtkWidget *create_llm_output_widget();
+
+static void on_llm_data_received(const gchar *data_chunk, gpointer user_data);
+static void on_llm_error(const gchar *error_message, gpointer user_data);
+static void on_llm_complete(gpointer user_data);
 
 // Static instance of your plugin data
 LLMPlugin *llm_plugin = NULL;
@@ -215,6 +221,38 @@ static gchar *get_current_document(gpointer user_data)
     return document_content;
 }
 
+static void on_llm_data_received(const gchar *data_chunk, gpointer user_data) {
+    LLMPlugin *plugin = (LLMPlugin *)user_data;
+    if (!plugin || !data_chunk || !plugin->output_text_view) {
+        return;
+    }
+
+    // Run in the main thread via GDK
+    gdk_threads_add_idle((GSourceFunc)llm_append_to_output_buffer, g_strdup(data_chunk));
+}
+
+static void on_llm_error(const gchar *error_message, gpointer user_data) {
+    LLMPlugin *plugin = (LLMPlugin *)user_data;
+    if (!plugin || !error_message) {
+        return;
+    }
+
+    // Format and display the error message
+    gchar *formatted_error = g_strdup_printf("Error: %s\n", error_message);
+    gdk_threads_add_idle((GSourceFunc)llm_append_to_output_buffer, formatted_error);
+}
+
+static void on_llm_complete(gpointer user_data) {
+    LLMPlugin *plugin = (LLMPlugin *)user_data;
+    if (!plugin || !plugin->spinner) {
+        return;
+    }
+
+    // Stop and hide the spinner
+    gdk_threads_add_idle((GSourceFunc)gtk_spinner_stop, plugin->spinner);
+    gdk_threads_add_idle((GSourceFunc)gtk_widget_hide, plugin->spinner);
+}
+
 
 /// @brief Handle send button click event in a separate thread.
 static void on_input_send_clicked(GtkButton *button, gpointer user_data) {
@@ -232,13 +270,28 @@ static void on_input_send_clicked(GtkButton *button, gpointer user_data) {
     gtk_widget_show(llm_plugin->spinner);
     gtk_spinner_start(GTK_SPINNER(llm_plugin->spinner));
 
+    // Clear previous output
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(llm_plugin->output_text_view));
+    if (buffer) {
+        gtk_text_buffer_set_text(buffer, "", -1);
+    }
+
     // Create a copy of the query and thread data
     gchar *query = g_strdup(input_text);
     gchar *current_document = get_current_document(llm_plugin);
+    
+    // Create callbacks structure
+    LLMCallbacks *callbacks = g_new0(LLMCallbacks, 1);
+    callbacks->on_data_received = on_llm_data_received;
+    callbacks->on_error = on_llm_error;
+    callbacks->on_complete = on_llm_complete;
+    callbacks->user_data = llm_plugin;
+    
     ThreadData *thread_data = g_malloc(sizeof(ThreadData));
     thread_data->llm_plugin = llm_plugin;
     thread_data->query = query;
     thread_data->current_document = current_document;
+    thread_data->callbacks = callbacks;
 
     // Create a new thread to handle the blocking network request
     g_thread_new("llm-thread", llm_thread_func, thread_data);

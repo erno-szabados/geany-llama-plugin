@@ -7,6 +7,18 @@
  * Shared plugin types.
  */
 
+typedef void (*LLMDataCallback)(const gchar *data_chunk, gpointer user_data);
+typedef void (*LLMErrorCallback)(const gchar *error_message, gpointer user_data);
+typedef void (*LLMCompleteCallback)(gpointer user_data);
+
+/// @brief Structure to hold the callbacks
+typedef struct {
+    LLMDataCallback on_data_received;
+    LLMErrorCallback on_error;
+    LLMCompleteCallback on_complete;
+    gpointer user_data; // Data to be passed to callbacks (e.g., LLMPlugin*)
+} LLMCallbacks;
+
 typedef struct {
     const gchar* role;    // "user", "assistant", "system"
     const gchar* content; // The message content
@@ -27,7 +39,6 @@ typedef struct {
 typedef struct {
     gchar *response_text;
     gchar *error;
-    gchar *raw_json;
 } LLMResponse;
 
 /// @brief Plugin data descriptor
@@ -59,11 +70,19 @@ typedef struct
     LLMArgs *llm_args; // LLM parameters (model, temp, max_token)
 } LLMPlugin;
 
-// Data structure to pass to the worker thread
+/// @brief Data structure to pass to the worker thread
 typedef struct {
     LLMPlugin *llm_plugin;
     gchar *query;
     gchar *current_document;
+    LLMCallbacks *callbacks; 
 } ThreadData;
+
+/// @brief structure to pass necessary info to write_callback
+typedef struct {
+    GString *accumulator;
+    LLMCallbacks *callbacks;
+} WriteCallbackData;
+
 
 #endif // __TYPES_H__
