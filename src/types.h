@@ -41,6 +41,9 @@ typedef struct {
     gchar *error;
 } LLMResponse;
 
+/// @brief Forward declaration of ThreadData
+typedef struct ThreadData ThreadData;
+
 /// @brief Plugin data descriptor
 typedef struct
 {
@@ -55,6 +58,7 @@ typedef struct
     GtkWidget *input_text_entry; // User text view (entry for now)
     GtkWidget *output_text_view; // Output text area
     GtkWidget *spinner; // LLM interaction indicator
+    GtkWidget *stop_button; // Button to stop the LLM generation
     
     GtkWidget *url_entry; // Entry for the LLM server URL
     GtkWidget *proxy_entry;
@@ -63,25 +67,34 @@ typedef struct
     gint page_number; // Tabindex
     
     // Plugin settings
-     gchar *llm_server_url;
-     gchar *proxy_url;
+    gchar *llm_server_url;
+    gchar *proxy_url;
 
     // LLM arguments
     LLMArgs *llm_args; // LLM parameters (model, temp, max_token)
+
+    ThreadData *active_thread_data;
+    gboolean is_generating;
+    gboolean cancel_requested;
 } LLMPlugin;
 
 /// @brief Data structure to pass to the worker thread
-typedef struct {
+typedef struct ThreadData {
     LLMPlugin *llm_plugin;
     gchar *query;
     gchar *current_document;
-    LLMCallbacks *callbacks; 
+    LLMCallbacks *callbacks;
+    // Pointer to a boolean flag for cancellation 
+    gboolean *cancel_flag;  
+    // Store the thread handle
+    GThread *thread;        
 } ThreadData;
 
 /// @brief structure to pass necessary info to write_callback
 typedef struct {
     GString *accumulator;
     LLMCallbacks *callbacks;
+    gboolean *cancel_flag;  
 } WriteCallbackData;
 
 

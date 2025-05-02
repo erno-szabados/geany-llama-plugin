@@ -45,6 +45,17 @@ size_t llm_write_callback(void *contents, size_t size, size_t nmemb, void *userp
 
     GString *json_accumulator = callback_data->accumulator;
     LLMCallbacks *callbacks = callback_data->callbacks;
+    gboolean *cancel_flag = callback_data->cancel_flag;
+
+    // Check if cancellation is requested
+    if (cancel_flag && *cancel_flag) {
+        // Signal completion to clean up UI
+        if (callbacks && callbacks->on_complete) {
+            callbacks->on_complete(callbacks->user_data);
+        }
+        // Return 0 to make curl abort the transfer
+        return 0;
+    }
 
     // Append the raw chunk received from curl directly
     g_string_append_len(json_accumulator, (const gchar *)contents, total_size);
@@ -130,8 +141,8 @@ gboolean llm_execute_query(
     const gchar *server_uri, 
     const gchar *proxy_url, 
     const gchar *json_payload, 
-    LLMCallbacks *callbacks)
-{
+    LLMCallbacks *callbacks,
+    gboolean *cancel_flag) {
     if (!server_uri || !json_payload) {
         if (callbacks && callbacks->on_error) {
             callbacks->on_error("Invalid server URI or JSON payload", callbacks->user_data);
@@ -152,7 +163,8 @@ gboolean llm_execute_query(
     // Create WriteCallbackData to pass both the accumulator and callbacks
     WriteCallbackData callback_data = {
         .accumulator = accumulator_buffer,
-        .callbacks = callbacks
+        .callbacks = callbacks,
+        .cancel_flag = cancel_flag
     };
 
     struct curl_slist *headers = NULL;

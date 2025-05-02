@@ -22,5 +22,6 @@ gboolean llm_execute_query(
     const gchar *server_uri, 
     const gchar *proxy_url, 
     const gchar *json_payload, 
-    LLMCallbacks *callbacks);
+    LLMCallbacks *callbacks,
+    gboolean *cancel_flag);
 #endif // __LLM_HTTP_H__

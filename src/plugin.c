@@ -18,6 +18,7 @@ static GtkWidget *create_llm_output_widget();
 static void on_llm_data_received(const gchar *data_chunk, gpointer user_data);
 static void on_llm_error(const gchar *error_message, gpointer user_data);
 static void on_llm_complete(gpointer user_data);
+static void on_stop_generation_clicked(GtkButton *button, gpointer user_data);
 
 // Static instance of your plugin data
 LLMPlugin *llm_plugin = NULL;
@@ -25,6 +26,8 @@ LLMPlugin *llm_plugin = NULL;
 /// @brief Called when the plugin is initialized
 gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata)
 {
+    g_print("LLM Plugin init\n");
+
     llm_plugin = g_new0(LLMPlugin, 1);
     llm_plugin->geany_plugin = plugin;
     llm_plugin->geany_data = plugin->geany_data;
@@ -32,12 +35,16 @@ gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata)
     llm_plugin->llm_server_url = NULL;
     llm_plugin->proxy_url = NULL;
     llm_plugin->llm_args = g_new0(LLMArgs, 1); 
-    g_print("LLM Plugin init\n");
+
+    llm_plugin->is_generating = FALSE;
+    llm_plugin->cancel_requested = FALSE;
+    llm_plugin->active_thread_data = NULL;
 
     // TODO: make them configurable
     llm_plugin->llm_args->max_tokens = 1024;
     llm_plugin->llm_args->temperature = 0.8f;
     llm_plugin->llm_args->model = NULL;
+
 
     llm_plugin_settings_load(llm_plugin);
 
@@ -242,23 +249,40 @@ static void on_llm_error(const gchar *error_message, gpointer user_data) {
     gdk_threads_add_idle((GSourceFunc)llm_append_to_output_buffer, formatted_error);
 }
 
+// Update on_llm_complete:
+
 static void on_llm_complete(gpointer user_data) {
     LLMPlugin *plugin = (LLMPlugin *)user_data;
-    if (!plugin || !plugin->spinner) {
+    if (!plugin) {
         return;
     }
 
-    // Stop and hide the spinner
-    gdk_threads_add_idle((GSourceFunc)gtk_spinner_stop, plugin->spinner);
-    gdk_threads_add_idle((GSourceFunc)gtk_widget_hide, plugin->spinner);
-}
+    // Reset generation state
+    plugin->is_generating = FALSE;
+    plugin->active_thread_data = NULL;
+    plugin->cancel_requested = FALSE;
 
+    // Stop spinner and disable stop button
+    gdk_threads_add_idle_full(G_PRIORITY_DEFAULT_IDLE, 
+        (GSourceFunc)gtk_spinner_stop, plugin->spinner, NULL);
+    
+    // Disable the stop button
+    gdk_threads_add_idle_full(G_PRIORITY_DEFAULT_IDLE, 
+        (GSourceFunc)(void(*)(GtkWidget*))gtk_widget_set_sensitive, 
+        plugin->stop_button, GINT_TO_POINTER(FALSE));
+}
 
 /// @brief Handle send button click event in a separate thread.
 static void on_input_send_clicked(GtkButton *button, gpointer user_data) {
     LLMPlugin *llm_plugin = (LLMPlugin *)user_data;
     if (!llm_plugin)
         return;
+        
+    // If we're already generating, don't start another request
+    if (llm_plugin->is_generating) {
+        g_warning("Generation already in progress");
+        return;
+    }
 
     const gchar *input_text = gtk_entry_get_text(GTK_ENTRY(llm_plugin->input_text_entry));
     if (!input_text || *input_text == '\0') {
@@ -266,15 +290,19 @@ static void on_input_send_clicked(GtkButton *button, gpointer user_data) {
         return;
     }
 
-    // Show and start the spinner
-    gtk_widget_show(llm_plugin->spinner);
+    // Start spinner and enable stop button
     gtk_spinner_start(GTK_SPINNER(llm_plugin->spinner));
+    gtk_widget_set_sensitive(llm_plugin->stop_button, TRUE);
 
     // Clear previous output
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(llm_plugin->output_text_view));
     if (buffer) {
         gtk_text_buffer_set_text(buffer, "", -1);
     }
+
+    // Set state
+    llm_plugin->is_generating = TRUE;
+    llm_plugin->cancel_requested = FALSE;
 
     // Create a copy of the query and thread data
     gchar *query = g_strdup(input_text);
@@ -292,14 +320,46 @@ static void on_input_send_clicked(GtkButton *button, gpointer user_data) {
     thread_data->query = query;
     thread_data->current_document = current_document;
     thread_data->callbacks = callbacks;
-
+    thread_data->cancel_flag = &llm_plugin->cancel_requested;
+    
+    // Store the thread data for potential cancellation
+    llm_plugin->active_thread_data = thread_data;
+    
     // Create a new thread to handle the blocking network request
-    g_thread_new("llm-thread", llm_thread_func, thread_data);
+    thread_data->thread = g_thread_new("llm-thread", llm_thread_func, thread_data);
 }
-
 /// @brief Invoke the same functionality as the send button click
 static void on_input_enter_activate(GtkEntry *entry, gpointer user_data) {
     on_input_send_clicked(GTK_BUTTON(NULL), user_data);
+}
+
+/// @brief Handle stop button click event
+static void on_stop_generation_clicked(GtkButton *button, gpointer user_data)
+{
+    LLMPlugin *plugin = (LLMPlugin *)user_data;
+    if (!plugin) {
+        return;
+    }
+    
+    g_print("Stop generation requested\n");
+    
+    // Set the cancel flag
+    plugin->cancel_requested = TRUE;
+    
+    // Message to the output
+    gchar *message = g_strdup("\n\n[Generation stopped by user]\n");
+    gdk_threads_add_idle((GSourceFunc)llm_append_to_output_buffer, message);
+    
+    // Update UI immediately by stopping spinner and disabling stop button
+    gdk_threads_add_idle_full(G_PRIORITY_HIGH, 
+        (GSourceFunc)gtk_spinner_stop, plugin->spinner, NULL);
+    
+    // Disable the stop button since generation is stopping
+    gdk_threads_add_idle_full(G_PRIORITY_HIGH, 
+        (GSourceFunc)(void(*)(GtkWidget*))gtk_widget_set_sensitive, 
+        plugin->stop_button, GINT_TO_POINTER(FALSE));
+    
+    // The actual thread termination is handled gracefully in the curl callback loop
 }
 
 /// @brief Create the input part of the plugin window.
@@ -325,8 +385,21 @@ static GtkWidget *create_llm_input_widget(gpointer user_data) {
     gtk_button_set_image(GTK_BUTTON(send_button), send_icon);
     g_signal_connect(G_OBJECT(send_button), "clicked", G_CALLBACK(on_input_send_clicked), user_data);
 
+    // Create the "Stop" button with an icon - moved from output widget
+    GtkWidget *stop_button = gtk_button_new();
+    GtkWidget *stop_icon = gtk_image_new_from_icon_name("process-stop", GTK_ICON_SIZE_BUTTON);
+    gtk_button_set_image(GTK_BUTTON(stop_button), stop_icon);
+    gtk_widget_set_tooltip_text(stop_button, _("Stop generation"));
+    g_signal_connect(G_OBJECT(stop_button), "clicked", G_CALLBACK(on_stop_generation_clicked), user_data);
+    // Disable it initially
+    gtk_widget_set_sensitive(stop_button, FALSE);
+    
+    // Store the reference to the stop button
+    llm_plugin->stop_button = stop_button;
+
     // Add label and buttons to the top row
     gtk_box_pack_start(GTK_BOX(top_row), input_label, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(top_row), stop_button, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(top_row), send_button, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(top_row), clear_button, FALSE, FALSE, 0);
 
@@ -366,12 +439,21 @@ static GtkWidget *create_llm_output_widget()
     gtk_container_add(GTK_CONTAINER(scrollwin), text_view);
     gtk_box_pack_start(GTK_BOX(main_box), scrollwin, TRUE, TRUE, 0);    
     
+    // Create a box for the spinner only
+    GtkWidget *spinner_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_halign(spinner_box, GTK_ALIGN_CENTER);
+
+    // Add the spinner
     GtkWidget *spinner = gtk_spinner_new();
     gtk_widget_set_halign(spinner, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(spinner, GTK_ALIGN_CENTER);
-    gtk_box_pack_start(GTK_BOX(main_box), spinner, FALSE, FALSE, 0);  
-    gtk_widget_hide(spinner); // Hide it initially
-    llm_plugin->spinner = spinner; // Save the spinner in the plugin struct
+    gtk_box_pack_start(GTK_BOX(spinner_box), spinner, FALSE, FALSE, 0);  
+    
+    // Store reference to spinner
+    llm_plugin->spinner = spinner; 
+
+    // Add the spinner box to the main box
+    gtk_box_pack_start(GTK_BOX(main_box), spinner_box, FALSE, FALSE, 0);    
 
     return main_box;
 }
