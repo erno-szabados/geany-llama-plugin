@@ -263,6 +263,16 @@ static gboolean disable_widget_idle(gpointer user_data) {
     return G_SOURCE_REMOVE;
 }
 
+// Helper function to stop spinner from an idle callback
+static gboolean stop_spinner_idle(gpointer user_data) {
+    GtkSpinner *spinner = GTK_SPINNER(user_data);
+    if (spinner) {
+        gtk_spinner_stop(spinner);
+    }
+    // Return FALSE (G_SOURCE_REMOVE) so the callback is only called once
+    return G_SOURCE_REMOVE;
+}
+
 static void on_llm_complete(gpointer user_data) {
     LLMPlugin *plugin = (LLMPlugin *)user_data;
     if (!plugin) {
@@ -276,7 +286,9 @@ static void on_llm_complete(gpointer user_data) {
 
     // Stop spinner and disable stop button - use direct calls for reliability
     gdk_threads_add_idle_full(G_PRIORITY_HIGH_IDLE,
-        (GSourceFunc)gtk_spinner_stop, plugin->spinner, NULL); // gtk_spinner_stop happens to match GSourceFunc signature (takes gpointer, returns gboolean implicitly via void->int promotion rules, though not ideal)
+        stop_spinner_idle,  // Use the helper function
+        plugin->spinner,    // Pass the spinner widget
+        NULL);
 
     g_print("Disabling stop button\n");
     // Correctly disable the stop button using the helper function
@@ -372,8 +384,10 @@ static void on_stop_generation_clicked(GtkButton *button, gpointer user_data)
     gdk_threads_add_idle((GSourceFunc)llm_append_to_output_buffer, message);
     
     // Update UI immediately by stopping spinner and disabling stop button
-    gdk_threads_add_idle_full(G_PRIORITY_HIGH, 
-        (GSourceFunc)gtk_spinner_stop, plugin->spinner, NULL);
+    gdk_threads_add_idle_full(G_PRIORITY_HIGH,
+    stop_spinner_idle,  // Use the helper function 
+    plugin->spinner,    // Pass the spinner widget
+    NULL);
     
     // Disable the stop button since generation is stopping 
     gdk_threads_add_idle_full(G_PRIORITY_HIGH,
