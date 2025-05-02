@@ -8,6 +8,12 @@ libgeany_llm_la_SOURCES = \
     plugin.h \
     settings.c \
     settings.h \
+    llm_http.c \
+    llm_http.h \
+    llm_json.c \
+    llm_json.h \
+    llm_util.c \
+    llm_util.h \
     llm.c \
     llm.h \
     types.h
