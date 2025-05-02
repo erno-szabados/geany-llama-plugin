@@ -45,7 +45,6 @@ gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata)
     llm_plugin->llm_args->temperature = 0.8f;
     llm_plugin->llm_args->model = NULL;
 
-
     llm_plugin_settings_load(llm_plugin);
 
     // Parent panel
@@ -61,6 +60,11 @@ gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata)
     gtk_box_pack_start(GTK_BOX(llm_plugin->llm_panel), llm_plugin->output_widget, TRUE, TRUE, 5);
     
     gtk_widget_show_all(llm_plugin->llm_panel);
+    
+    // Extra safeguard: Make sure the stop button is disabled at initialization
+    if (llm_plugin->stop_button) {
+        gtk_widget_set_sensitive(llm_plugin->stop_button, FALSE);
+    }
     
     // Add the panel to the notebook
     llm_plugin->page_number = gtk_notebook_append_page(
@@ -249,7 +253,15 @@ static void on_llm_error(const gchar *error_message, gpointer user_data) {
     gdk_threads_add_idle((GSourceFunc)llm_append_to_output_buffer, formatted_error);
 }
 
-// Update on_llm_complete:
+// Helper function to disable a widget from an idle callback
+static gboolean disable_widget_idle(gpointer user_data) {
+    GtkWidget *widget = GTK_WIDGET(user_data);
+    if (widget) {
+        gtk_widget_set_sensitive(widget, FALSE);
+    }
+    // Return FALSE (G_SOURCE_REMOVE) so the callback is only called once
+    return G_SOURCE_REMOVE;
+}
 
 static void on_llm_complete(gpointer user_data) {
     LLMPlugin *plugin = (LLMPlugin *)user_data;
@@ -262,14 +274,16 @@ static void on_llm_complete(gpointer user_data) {
     plugin->active_thread_data = NULL;
     plugin->cancel_requested = FALSE;
 
-    // Stop spinner and disable stop button
-    gdk_threads_add_idle_full(G_PRIORITY_DEFAULT_IDLE, 
-        (GSourceFunc)gtk_spinner_stop, plugin->spinner, NULL);
-    
-    // Disable the stop button
-    gdk_threads_add_idle_full(G_PRIORITY_DEFAULT_IDLE, 
-        (GSourceFunc)(void(*)(GtkWidget*))gtk_widget_set_sensitive, 
-        plugin->stop_button, GINT_TO_POINTER(FALSE));
+    // Stop spinner and disable stop button - use direct calls for reliability
+    gdk_threads_add_idle_full(G_PRIORITY_HIGH_IDLE,
+        (GSourceFunc)gtk_spinner_stop, plugin->spinner, NULL); // gtk_spinner_stop happens to match GSourceFunc signature (takes gpointer, returns gboolean implicitly via void->int promotion rules, though not ideal)
+
+    g_print("Disabling stop button\n");
+    // Correctly disable the stop button using the helper function
+    gdk_threads_add_idle_full(G_PRIORITY_HIGH_IDLE,
+        disable_widget_idle, // Use the helper function
+        plugin->stop_button, // Pass the button as user_data
+        NULL); // No destroy notify needed for the widget pointer
 }
 
 /// @brief Handle send button click event in a separate thread.
@@ -341,6 +355,13 @@ static void on_stop_generation_clicked(GtkButton *button, gpointer user_data)
         return;
     }
     
+    // IMPORTANT: Guard against clicks when no generation is happening
+    if (!plugin->is_generating || plugin->cancel_requested) {
+        // Just disable the button and do nothing else - prevents freezes
+        gtk_widget_set_sensitive(plugin->stop_button, FALSE);
+        return;
+    }
+    
     g_print("Stop generation requested\n");
     
     // Set the cancel flag
@@ -354,12 +375,11 @@ static void on_stop_generation_clicked(GtkButton *button, gpointer user_data)
     gdk_threads_add_idle_full(G_PRIORITY_HIGH, 
         (GSourceFunc)gtk_spinner_stop, plugin->spinner, NULL);
     
-    // Disable the stop button since generation is stopping
-    gdk_threads_add_idle_full(G_PRIORITY_HIGH, 
-        (GSourceFunc)(void(*)(GtkWidget*))gtk_widget_set_sensitive, 
-        plugin->stop_button, GINT_TO_POINTER(FALSE));
-    
-    // The actual thread termination is handled gracefully in the curl callback loop
+    // Disable the stop button since generation is stopping 
+    gdk_threads_add_idle_full(G_PRIORITY_HIGH,
+        disable_widget_idle, // Use the helper function
+        plugin->stop_button, // Pass the button as user_data
+        NULL); // No destroy notify needed
 }
 
 /// @brief Create the input part of the plugin window.
@@ -385,13 +405,14 @@ static GtkWidget *create_llm_input_widget(gpointer user_data) {
     gtk_button_set_image(GTK_BUTTON(send_button), send_icon);
     g_signal_connect(G_OBJECT(send_button), "clicked", G_CALLBACK(on_input_send_clicked), user_data);
 
-    // Create the "Stop" button with an icon - moved from output widget
+    // Create the "Stop" button with an icon
     GtkWidget *stop_button = gtk_button_new();
     GtkWidget *stop_icon = gtk_image_new_from_icon_name("process-stop", GTK_ICON_SIZE_BUTTON);
     gtk_button_set_image(GTK_BUTTON(stop_button), stop_icon);
     gtk_widget_set_tooltip_text(stop_button, _("Stop generation"));
     g_signal_connect(G_OBJECT(stop_button), "clicked", G_CALLBACK(on_stop_generation_clicked), user_data);
-    // Disable it initially
+    
+    // IMPORTANT: Disable it initially - ensure it's inactive when starting
     gtk_widget_set_sensitive(stop_button, FALSE);
     
     // Store the reference to the stop button
