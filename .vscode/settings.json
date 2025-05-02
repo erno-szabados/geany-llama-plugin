@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "stdlib.h": "c",
+        "plugin.h": "c",
+        "types.h": "c",
+        "llm_http.h": "c"
+    }
+}
