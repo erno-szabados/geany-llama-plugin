@@ -1,5 +1,7 @@
 AC_INIT([geany-llm-plugin], [0.1], [erno.szabados@windowslive.com])
 
+CFLAGS="$CFLAGS -g -O0"
+CXXFLAGS="$CXXFLAGS -g -O0"
 
 AC_CONFIG_SRCDIR([src/plugin.c])
 AC_CONFIG_HEADERS([config.h])
