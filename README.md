@@ -8,12 +8,6 @@ This is a Geany plugin to provide interaction with a Large Language Model
 - Can stop streaming 
 - Can set model, proxy, llm host
 
-### Warning!
-
-- Do not unload/reload the module or it will crash geany. json-glib could
-not deal with dynamic reloading as is, and i don't plan to implement 
-gobject module loading (well, i tried, but i'd rather won't). 
-
 
 Right now it connects to the completion endpoint and returns a single answer only.
 Hopefully it will be able to do more advanced functions later, like

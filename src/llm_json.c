@@ -1,125 +1,52 @@
 #include <glib.h>
-#include <json-glib/json-glib.h> // dependency: libjson-glib-dev
+#include <json-c/json.h> 
 
 #include "llm_json.h"
 #include "llm_util.h"
 
 
-/// @brief Construct the JSON request payload using json-glib for the completion endpoint
+/// @brief Construct the JSON request payload using json-c for the completion endpoint
 gchar* llm_construct_completion_json_payload(const gchar* query, const gchar *current_document, const LLMArgs* args) {
-    JsonBuilder* builder = json_builder_new();
-
-    json_builder_begin_object(builder);
-
-    json_builder_set_member_name(builder, "model");
-    json_builder_add_string_value(builder, args->model);
-
+    // Create the root object
+    struct json_object *root = json_object_new_object();
+    
+    // Add model field
+    json_object_object_add(root, "model", 
+        json_object_new_string(args->model));
+    
+    // Construct the full prompt
     GString *full_prompt = g_string_new("Analyze the following document:\n\n");
     g_string_append(full_prompt, current_document);
     g_string_append(full_prompt, "\n\nBased on the document, give a concise answer the following question:\n");
     g_string_append(full_prompt, query);
-
-    json_builder_set_member_name(builder, "prompt");
-    json_builder_add_string_value(builder, full_prompt->str);
-
-    json_builder_set_member_name(builder, "max_tokens");
-    json_builder_add_int_value(builder, args->max_tokens);
-
-    json_builder_set_member_name(builder, "temperature");
-    json_builder_add_double_value(builder, args->temperature);
     
-    // Receiving streaming tokens
-    json_builder_set_member_name(builder, "stream");
-    json_builder_add_boolean_value(builder, TRUE); 
-
-    json_builder_end_object(builder);
-
-    JsonGenerator* generator = json_generator_new();
-    JsonNode* root = json_builder_get_root(builder);
-    json_generator_set_root(generator, root);
-
-    gchar* json_payload = json_generator_to_data(generator, NULL);
-
-    g_object_unref(generator);
-    json_node_free(root);
-    g_object_unref(builder);
-    g_string_free(full_prompt, TRUE);
-
-    return json_payload;
-}
-
-/// @brief Construct the JSON request payload using json-glib for the chat completion endpoint
-gchar* llm_construct_chat_completion_json_payload(const gchar* query, const LLMArgs* args) {
-    JsonBuilder* builder = json_builder_new();
-
-    // Begin the root object
-    json_builder_begin_object(builder);
-
-    // Add "model" field
-    json_builder_set_member_name(builder, "model");
-    json_builder_add_string_value(builder, args->model);
-
-    // Add "messages" array
-    json_builder_set_member_name(builder, "messages");
-    json_builder_begin_array(builder);
+    // Add prompt field
+    json_object_object_add(root, "prompt", 
+        json_object_new_string(full_prompt->str));
     
-    // Add "system" message
-    json_builder_begin_object(builder);
-    json_builder_set_member_name(builder, "role");
-    json_builder_add_string_value(builder, "system");
-    json_builder_set_member_name(builder, "content");
-    json_builder_add_string_value(builder, args->system_instruction); // A predefined instruction in LLMArgs
-    json_builder_end_object(builder);
-
-    // Add "user" message (the query)
-    json_builder_begin_object(builder);
-    json_builder_set_member_name(builder, "role");
-    json_builder_add_string_value(builder, "user");
-    json_builder_set_member_name(builder, "content");
-    json_builder_add_string_value(builder, query);
-    json_builder_end_object(builder);
-
-    // Add more messages from args->messages (if any)
-    for (guint i = 0; i < args->messages_length; ++i) {
-        json_builder_begin_object(builder);
-        json_builder_set_member_name(builder, "role");
-        json_builder_add_string_value(builder, args->messages[i].role);
-        json_builder_set_member_name(builder, "content");
-        json_builder_add_string_value(builder, args->messages[i].content);
-        json_builder_end_object(builder);
-    }
-
-    // End the "messages" array
-    json_builder_end_array(builder);
-
-    // Add "max_tokens" field
-    json_builder_set_member_name(builder, "max_tokens");
-    json_builder_add_int_value(builder, args->max_tokens);
-
-    // Add "temperature" field
-    json_builder_set_member_name(builder, "temperature");
-    json_builder_add_double_value(builder, args->temperature);
+    // Add max_tokens field
+    json_object_object_add(root, "max_tokens", 
+        json_object_new_int(args->max_tokens));
     
-    json_builder_set_member_name(builder, "stream");
-    json_builder_add_boolean_value(builder, TRUE); 
-
-    // End the root object
-    json_builder_end_object(builder);
-
-    // Generate the JSON data
-    JsonGenerator* generator = json_generator_new();
-    JsonNode* root = json_builder_get_root(builder);
-    json_generator_set_root(generator, root);
-
-    gchar* json_payload = json_generator_to_data(generator, NULL);
-
+    // Add temperature field
+    json_object_object_add(root, "temperature", 
+        json_object_new_double(args->temperature));
+    
+    // Add stream field (TRUE for streaming tokens)
+    json_object_object_add(root, "stream", 
+        json_object_new_boolean(TRUE));
+    
+    // Convert the JSON object to a string
+    const char *json_string = json_object_to_json_string_ext(root, JSON_C_TO_STRING_PLAIN);
+    gchar *json_payload = g_strdup(json_string);
+    
     // Clean up
-    g_object_unref(generator);
-    json_node_free(root);
-    g_object_unref(builder);
-
+    json_object_put(root);  // Decrements refcount and frees when zero
+    g_string_free(full_prompt, TRUE);
+    
     return json_payload;
 }
+
 
 /// @brief populate LLMResponse from raw JSON data
 gboolean llm_json_to_response(LLMResponse *response, GString *response_buffer, GError **error)
@@ -131,107 +58,149 @@ gboolean llm_json_to_response(LLMResponse *response, GString *response_buffer, G
     }
     memset(response, 0, sizeof(LLMResponse));
 
-    JsonParser *parser = json_parser_new();
-
     if (!response_buffer || !response_buffer->str || response_buffer->str[0] == '\0')
     {
         g_warning("Invalid or empty response buffer received!\n");
-        g_object_unref(parser);
         return FALSE;
     }
 
-    // Let the parser handle potential UTF-8 issues during parsing
-    if (!json_parser_load_from_data(parser, response_buffer->str, -1, error))
+    // Parse the JSON response
+    struct json_object *root = NULL;
+    enum json_tokener_error jerr = json_tokener_success;
+    struct json_tokener *tok = json_tokener_new();
+    
+    root = json_tokener_parse_ex(tok, response_buffer->str, -1);
+    jerr = json_tokener_get_error(tok);
+    
+    if (jerr != json_tokener_success)
     {
-        g_warning("Failed to parse JSON data: %s\n", (*error) ? (*error)->message : "Unknown error");
-        // Log the problematic buffer content for debugging
+        g_warning("Failed to parse JSON data: %s\n", json_tokener_error_desc(jerr));
         g_warning("Problematic JSON buffer content: %s", response_buffer->str);
-        g_object_unref(parser);
+        if (error) {
+            g_set_error(error, g_quark_from_static_string("JSON Error"), 1, 
+                        "JSON parsing failed: %s", json_tokener_error_desc(jerr));
+        }
+        // Free root object if it was created despite the error
+        if (root) {
+            json_object_put(root);
+        }
+        json_tokener_free(tok);
         return FALSE;
     }
-
-    JsonNode *root = json_parser_get_root(parser);
-    if (!root || !JSON_NODE_HOLDS_OBJECT(root))
-    { // Added NULL check for root
-        g_set_error(error, g_quark_from_static_string("JSON Error"), 1, "Root is not a JSON object or parsing failed");
-        g_object_unref(parser);
+    
+    // Check if root is null (shouldn't happen if jerr is success, but being defensive)
+    if (!root) {
+        g_warning("Failed to parse JSON data: root object is NULL\n");
+        if (error) {
+            g_set_error(error, g_quark_from_static_string("JSON Error"), 1, 
+                        "JSON parsing failed: root object is NULL");
+        }
+        json_tokener_free(tok);
         return FALSE;
     }
-
-    JsonObject *root_object = json_node_get_object(root);
+    
+    json_tokener_free(tok);
+    
+    // Ensure root is an object
+    if (!json_object_is_type(root, json_type_object))
+    {
+        g_set_error(error, g_quark_from_static_string("JSON Error"), 1, 
+                    "Root is not a JSON object");
+        json_object_put(root);
+        return FALSE;
+    }
 
     // Check for top-level error first (common in some APIs)
-    if (json_object_has_member(root_object, "error"))
+    struct json_object *error_obj = NULL;
+    if (json_object_object_get_ex(root, "error", &error_obj))
     {
-        JsonNode *error_node = json_object_get_member(root_object, "error");
-        if (JSON_NODE_HOLDS_VALUE(error_node))
+        if (json_object_is_type(error_obj, json_type_string))
         {
-            response->error = safe_strdup(json_node_get_string(error_node));
+            response->error = g_strdup(json_object_get_string(error_obj));
         }
-        else if (JSON_NODE_HOLDS_OBJECT(error_node))
+        else if (json_object_is_type(error_obj, json_type_object))
         {
             // Try to extract a message field if the error is an object
-            JsonObject *error_obj = json_node_get_object(error_node);
-            if (json_object_has_member(error_obj, "message"))
+            struct json_object *message_obj = NULL;
+            if (json_object_object_get_ex(error_obj, "message", &message_obj) && 
+                json_object_is_type(message_obj, json_type_string))
             {
-                response->error = safe_strdup(json_object_get_string_member(error_obj, "message"));
+                response->error = g_strdup(json_object_get_string(message_obj));
             }
             else
             {
                 // Fallback: stringify the error object (might be verbose)
-                JsonGenerator *gen = json_generator_new();
-                json_generator_set_root(gen, error_node);
-                response->error = json_generator_to_data(gen, NULL);
-                g_object_unref(gen);
+                response->error = g_strdup(json_object_to_json_string_ext(error_obj, JSON_C_TO_STRING_PRETTY));
             }
         }
         // If there's an error, we might not have choices, so don't make it fatal yet
     }
 
     // Extract text from choices if available
-    if (json_object_has_member(root_object, "choices"))
+    struct json_object *choices_obj = NULL;
+    if (json_object_object_get_ex(root, "choices", &choices_obj) && 
+        json_object_is_type(choices_obj, json_type_array))
     {
-        JsonArray *choices = json_object_get_array_member(root_object, "choices");
-        if (choices && json_array_get_length(choices) > 0)
+        size_t choices_len = json_object_array_length(choices_obj);
+        if (choices_len > 0)
         {
-            JsonNode *first_choice_node = json_array_get_element(choices, 0);
-            if (JSON_NODE_HOLDS_OBJECT(first_choice_node))
+            struct json_object *first_choice = json_object_array_get_idx(choices_obj, 0);
+            if (json_object_is_type(first_choice, json_type_object))
             {
-                JsonObject *first_choice_obj = json_node_get_object(first_choice_node);
-
                 // Handle different potential structures (e.g., OpenAI chat vs completion)
-                const gchar *text_content = NULL;
-                if (json_object_has_member(first_choice_obj, "text"))
-                { // Completion API style
-                    text_content = json_object_get_string_member(first_choice_obj, "text");
+                const char *text_content = NULL;
+                
+                // Completion API style
+                struct json_object *text_obj = NULL;
+                if (json_object_object_get_ex(first_choice, "text", &text_obj) && 
+                    json_object_is_type(text_obj, json_type_string))
+                {
+                    text_content = json_object_get_string(text_obj);
                 }
-                else if (json_object_has_member(first_choice_obj, "delta"))
-                { // Chat API streaming style (delta)
-                    JsonObject *delta_obj = json_object_get_object_member(first_choice_obj, "delta");
-                    if (json_object_has_member(delta_obj, "content"))
+                // Chat API streaming style (delta)
+                else
+                {
+                    struct json_object *delta_obj = NULL;
+                    if (json_object_object_get_ex(first_choice, "delta", &delta_obj) && 
+                        json_object_is_type(delta_obj, json_type_object))
                     {
-                        text_content = json_object_get_string_member(delta_obj, "content");
+                        struct json_object *content_obj = NULL;
+                        if (json_object_object_get_ex(delta_obj, "content", &content_obj) && 
+                            json_object_is_type(content_obj, json_type_string))
+                        {
+                            text_content = json_object_get_string(content_obj);
+                        }
+                    }
+                    // Chat API non-streaming style (message)
+                    else
+                    {
+                        struct json_object *message_obj = NULL;
+                        if (json_object_object_get_ex(first_choice, "message", &message_obj) && 
+                            json_object_is_type(message_obj, json_type_object))
+                        {
+                            struct json_object *content_obj = NULL;
+                            if (json_object_object_get_ex(message_obj, "content", &content_obj) && 
+                                json_object_is_type(content_obj, json_type_string))
+                            {
+                                text_content = json_object_get_string(content_obj);
+                            }
+                        }
                     }
                 }
-                else if (json_object_has_member(first_choice_obj, "message"))
-                { // Chat API non-streaming style (message)
-                    JsonObject *message_obj = json_object_get_object_member(first_choice_obj, "message");
-                    if (json_object_has_member(message_obj, "content"))
-                    {
-                        text_content = json_object_get_string_member(message_obj, "content");
-                    }
+                
+                if (text_content) {
+                    response->response_text = g_strdup(text_content);
                 }
-                response->response_text = safe_strdup(text_content);
             }
         }
     }
 
-   if (response->error)
+    if (response->error)
     {
         g_warning("API returned error: %s\n", response->error);
     }
 
-    g_object_unref(parser);
+    json_object_put(root);  // Free the parsed JSON object
 
     // Return TRUE if we got *something* (text or error), FALSE only on parse failure
     return (response->response_text != NULL || response->error != NULL);
