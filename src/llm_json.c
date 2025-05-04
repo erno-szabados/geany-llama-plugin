@@ -72,13 +72,28 @@ gboolean llm_json_to_response(LLMResponse *response, GString *response_buffer, G
     root = json_tokener_parse_ex(tok, response_buffer->str, -1);
     jerr = json_tokener_get_error(tok);
     
-    if (jerr != json_tokener_success || !root)
+    if (jerr != json_tokener_success)
     {
         g_warning("Failed to parse JSON data: %s\n", json_tokener_error_desc(jerr));
         g_warning("Problematic JSON buffer content: %s", response_buffer->str);
         if (error) {
             g_set_error(error, g_quark_from_static_string("JSON Error"), 1, 
                         "JSON parsing failed: %s", json_tokener_error_desc(jerr));
+        }
+        // Free root object if it was created despite the error
+        if (root) {
+            json_object_put(root);
+        }
+        json_tokener_free(tok);
+        return FALSE;
+    }
+    
+    // Check if root is null (shouldn't happen if jerr is success, but being defensive)
+    if (!root) {
+        g_warning("Failed to parse JSON data: root object is NULL\n");
+        if (error) {
+            g_set_error(error, g_quark_from_static_string("JSON Error"), 1, 
+                        "JSON parsing failed: root object is NULL");
         }
         json_tokener_free(tok);
         return FALSE;
