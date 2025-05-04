@@ -3,6 +3,7 @@
         "stdlib.h": "c",
         "plugin.h": "c",
         "types.h": "c",
-        "llm_http.h": "c"
+        "llm_http.h": "c",
+        "llm_json.h": "c"
     }
 }
