@@ -7,12 +7,12 @@ This is a Geany plugin to provide interaction with a Large Language Model
 - Streaming response from the LLM
 - Can stop streaming 
 - Can set model, proxy, llm host
+- Attach selected documents to context
 
 
 Right now it connects to the completion endpoint and returns a single answer only.
 Hopefully it will be able to do more advanced functions later, like
 - Code completions in a document (TODO)
-- Chat with documents attached - The current document is attached to the context.
 - Set API key, temperature, sampling params, ...
 
 ### Building and Installation:
