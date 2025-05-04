@@ -72,7 +72,7 @@ void on_select_documents_clicked(GtkButton *button, gpointer user_data) {
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrollwin),
                                  GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
     gtk_container_add(GTK_CONTAINER(scrollwin), treeview);
-    gtk_widget_set_size_request(scrollwin, 400, 300);
+    gtk_widget_set_size_request(scrollwin, 600, 300);
     
     // Add content to the dialog
     GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
