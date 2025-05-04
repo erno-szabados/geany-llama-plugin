@@ -37,7 +37,7 @@ gchar* llm_construct_completion_json_payload(const gchar* query, const gchar *cu
         json_object_new_boolean(TRUE));
     
     // Convert the JSON object to a string
-    const char *json_string = json_object_to_json_string_ext(root, JSON_C_TO_STRING_PRETTY);
+    const char *json_string = json_object_to_json_string_ext(root, JSON_C_TO_STRING_PLAIN);
     gchar *json_payload = g_strdup(json_string);
     
     // Clean up
