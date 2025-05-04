@@ -218,6 +218,11 @@ static void on_input_clear_clicked(GtkButton *button, gpointer user_data)
     }
     g_print("Clear Button was clicked!\n");
     gtk_entry_set_text(GTK_ENTRY(llm_plugin->input_text_entry), "");
+      // Get the existing buffer and clear it instead
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(llm_plugin->output_text_view));
+    if (buffer) {
+        gtk_text_buffer_set_text(buffer, "", -1);
+    }
 }
 
 
@@ -428,12 +433,14 @@ static GtkWidget *create_llm_input_widget(gpointer user_data) {
     GtkWidget *clear_button = gtk_button_new();
     GtkWidget *clear_icon = gtk_image_new_from_icon_name("edit-clear", GTK_ICON_SIZE_BUTTON);
     gtk_button_set_image(GTK_BUTTON(clear_button), clear_icon);
+    gtk_widget_set_tooltip_text(clear_button, _("Clear request and response"));
     g_signal_connect(G_OBJECT(clear_button), "clicked", G_CALLBACK(on_input_clear_clicked), user_data);
 
     // Create the "Send" button with an icon
     GtkWidget *send_button = gtk_button_new();
     GtkWidget *send_icon = gtk_image_new_from_icon_name("document-send", GTK_ICON_SIZE_BUTTON);
     gtk_button_set_image(GTK_BUTTON(send_button), send_icon);
+    gtk_widget_set_tooltip_text(send_button, _("Send request"));
     g_signal_connect(G_OBJECT(send_button), "clicked", G_CALLBACK(on_input_send_clicked), user_data);
 
     // Create the "Stop" button with an icon
