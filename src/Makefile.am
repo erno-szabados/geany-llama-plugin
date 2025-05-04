@@ -27,14 +27,14 @@ libgeany_llm_la_CFLAGS = \
     $(AM_C_CFLAGS) \
     $(WARN_CFLAGS) \
     $(GETTEXT_CFLAGS)\
-    $(JSONGLIB_CFLAGS)
+    $(JSONC_CFLAGS)
 
 libgeany_llm_la_LIBADD = \
     $(GEANY_LIBS) \
     $(GTK3_LIBS) \
     $(LIBCURL_LIBS) \
     $(GETTEXT_LIBS) \
-    $(JSONGLIB_LIBS)
+    $(JSONC_LIBS)
 
 # Installation directory for Geany plugins
 # Automake expects the installation directory for _LTLIBRARIES to be defined
