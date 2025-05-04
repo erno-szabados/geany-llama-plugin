@@ -14,11 +14,53 @@ gchar* llm_construct_completion_json_payload(const gchar* query, const gchar *cu
     json_object_object_add(root, "model", 
         json_object_new_string(args->model));
     
-    // Construct the full prompt
-    GString *full_prompt = g_string_new("Analyze the following document:\n\n");
-    g_string_append(full_prompt, current_document);
-    g_string_append(full_prompt, "\n\nBased on the document, give a concise answer the following question:\n");
+    // Construct the full prompt with all selected documents
+    GString *full_prompt = g_string_new("I will analyze the following documents:\n\n");
+    
+    // Include the current document if needed
+    if (current_document && llm_plugin->include_current_document) {
+        g_string_append(full_prompt, "--- CURRENT DOCUMENT ---\n");
+        g_string_append(full_prompt, current_document);
+        g_string_append(full_prompt, "\n\n");
+    }
+    
+    // Include selected documents
+    if (llm_plugin->selected_document_ids) {
+        for (guint i = 0; i < llm_plugin->selected_document_ids->len; i++) {
+            GeanyDocument *doc = g_ptr_array_index(llm_plugin->selected_document_ids, i);
+            if (!doc || !doc->is_valid) {
+                continue; // Skip invalid documents
+            }
+            
+            // Skip if this is the current document and we already included it
+            if (llm_plugin->include_current_document && 
+                doc == document_get_current()) {
+                continue;
+            }
+            
+            // Get document content
+            ScintillaObject *sci = doc->editor->sci;
+            gsize length = scintilla_send_message(sci, SCI_GETTEXTLENGTH, 0, 0);
+            gchar* doc_content = g_malloc(length + 1);
+            
+            if (doc_content) {
+                scintilla_send_message(sci, SCI_GETTEXT, length + 1, (sptr_t)doc_content);
+                
+                g_string_append_printf(full_prompt, "--- DOCUMENT: %s ---\n", 
+                                     doc->file_name ? doc->file_name : "(unnamed)");
+                g_string_append(full_prompt, doc_content);
+                g_string_append(full_prompt, "\n\n");
+                
+                g_free(doc_content);
+            }
+        }
+    }
+    
+    g_string_append(full_prompt, "Based on the document(s), answer the following question:\n");
     g_string_append(full_prompt, query);
+
+    // For debug:
+    //g_print("Full prompt: %s\n", full_prompt->str);
     
     // Add prompt field
     json_object_object_add(root, "prompt", 

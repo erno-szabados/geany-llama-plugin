@@ -7,6 +7,7 @@
 #include <SciLexer.h>
 
 #include "llm_http.h"
+#include "llm_json.h"
 
 #ifdef HAVE_CONFIG_H
 # include "config.h"
@@ -19,6 +20,10 @@ static void on_llm_data_received(const gchar *data_chunk, gpointer user_data);
 static void on_llm_error(const gchar *error_message, gpointer user_data);
 static void on_llm_complete(gpointer user_data);
 static void on_stop_generation_clicked(GtkButton *button, gpointer user_data);
+static void on_select_documents_clicked(GtkButton *button, gpointer user_data);
+static void on_document_toggled(GtkCellRendererToggle *cell, gchar *path_str, gpointer data);
+static void on_document_close(GObject *obj, GeanyDocument *doc, gpointer user_data);
+static void update_document_button_state(LLMPlugin *plugin);
 
 // Static instance of your plugin data
 LLMPlugin *llm_plugin = NULL;
@@ -47,6 +52,9 @@ gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata)
 
     llm_plugin_settings_load(llm_plugin);
 
+    llm_plugin->selected_document_ids = NULL;
+    llm_plugin->include_current_document = TRUE; // Default to including current document
+
     // Parent panel
     llm_plugin->llm_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_widget_set_vexpand(llm_plugin->llm_panel, TRUE);
@@ -71,6 +79,13 @@ gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata)
             GTK_NOTEBOOK(llm_plugin->geany_data->main_widgets->sidebar_notebook),
             llm_plugin->llm_panel,
             gtk_label_new(_("AI Model")));
+            
+    // After UI is created, update the document button state
+    update_document_button_state(llm_plugin);
+
+    // Connect to the document-close signal
+    plugin_signal_connect(plugin, NULL, "document-close", TRUE, 
+                         G_CALLBACK(on_document_close), llm_plugin);
 
     return TRUE;
 }
@@ -86,6 +101,8 @@ void llm_plugin_cleanup(GeanyPlugin *plugin, gpointer pdata)
         g_free(llm_plugin->proxy_url);
         if (llm_plugin->llm_panel)
             gtk_widget_destroy(llm_plugin->llm_panel);
+        if (llm_plugin->selected_document_ids)
+            g_ptr_array_free(llm_plugin->selected_document_ids, TRUE);
         g_free(llm_plugin);
         llm_plugin = NULL;
     }
@@ -432,12 +449,20 @@ static GtkWidget *create_llm_input_widget(gpointer user_data) {
     // Store the reference to the stop button
     llm_plugin->stop_button = stop_button;
 
+    // Create the "Documents" button with an icon
+    GtkWidget *docs_button = gtk_button_new();
+    GtkWidget *docs_icon = gtk_image_new_from_icon_name("document-properties", GTK_ICON_SIZE_BUTTON);
+    gtk_button_set_image(GTK_BUTTON(docs_button), docs_icon);
+    gtk_widget_set_tooltip_text(docs_button, _("Select documents for context"));
+    g_signal_connect(G_OBJECT(docs_button), "clicked", G_CALLBACK(on_select_documents_clicked), user_data);
+
     // Add label and buttons to the top row
     gtk_box_pack_start(GTK_BOX(top_row), input_label, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(top_row), stop_button, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(top_row), send_button, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(top_row), clear_button, FALSE, FALSE, 0);
-
+    gtk_box_pack_end(GTK_BOX(top_row), docs_button, FALSE, FALSE, 0); // Add the new button
+    
     // Create a text view (textarea) for the query
     GtkWidget *text_entry = gtk_entry_new();
     llm_plugin->input_text_entry = text_entry;
@@ -493,3 +518,214 @@ static GtkWidget *create_llm_output_widget()
     return main_box;
 }
 
+static void on_select_documents_clicked(GtkButton *button, gpointer user_data) {
+    LLMPlugin *llm_plugin = (LLMPlugin *)user_data;
+    if (!llm_plugin) {
+        return;
+    }
+
+    // Create a dialog
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(
+        _("Select Documents for Context"),
+        GTK_WINDOW(llm_plugin->geany_data->main_widgets->window),
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+        _("OK"), GTK_RESPONSE_ACCEPT,
+        _("Cancel"), GTK_RESPONSE_CANCEL,
+        NULL);
+
+    // Create list store and view for documents
+    GtkListStore *store = gtk_list_store_new(3, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_POINTER);
+    GtkWidget *treeview = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
+    
+    // Add a checkbox column
+    GtkCellRenderer *toggle_renderer = gtk_cell_renderer_toggle_new();
+    g_signal_connect(toggle_renderer, "toggled", G_CALLBACK(on_document_toggled), store);
+    
+    GtkTreeViewColumn *toggle_column = gtk_tree_view_column_new_with_attributes(
+        _("Include"), toggle_renderer, "active", 0, NULL);
+    gtk_tree_view_append_column(GTK_TREE_VIEW(treeview), toggle_column);
+    
+    // Add document name column
+    GtkCellRenderer *text_renderer = gtk_cell_renderer_text_new();
+    GtkTreeViewColumn *text_column = gtk_tree_view_column_new_with_attributes(
+        _("Document"), text_renderer, "text", 1, NULL);
+    gtk_tree_view_append_column(GTK_TREE_VIEW(treeview), text_column);
+    
+    // Populate the list with open documents
+    GPtrArray *selected_docs = llm_plugin->selected_document_ids;
+    guint i, doc_cnt = llm_plugin->geany_data->documents_array->len;
+    
+    for (i = 0; i < doc_cnt; i++) {
+        GeanyDocument *doc = g_ptr_array_index(llm_plugin->geany_data->documents_array, i);
+        if (doc && doc->is_valid) {
+            gboolean is_selected = FALSE;
+            
+            // Check if this document is in the selected list
+            if (selected_docs) {
+                for (guint j = 0; j < selected_docs->len; j++) {
+                    if (doc == g_ptr_array_index(selected_docs, j)) {
+                        is_selected = TRUE;
+                        break;
+                    }
+                }
+            }
+            
+            GtkTreeIter iter;
+            gtk_list_store_append(store, &iter);
+            gtk_list_store_set(store, &iter, 
+                0, is_selected,
+                1, doc->file_name,
+                2, doc,
+                -1);
+        }
+    }
+    
+    // Add the "include current document automatically" checkbox
+    GtkWidget *auto_include = gtk_check_button_new_with_label(_("Automatically include current document"));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(auto_include), 
+                               llm_plugin->include_current_document);
+    
+    // Set up scrolled window
+    GtkWidget *scrollwin = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrollwin),
+                                 GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_container_add(GTK_CONTAINER(scrollwin), treeview);
+    gtk_widget_set_size_request(scrollwin, 400, 300);
+    
+    // Add content to the dialog
+    GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_add(GTK_CONTAINER(content_area), scrollwin);
+    gtk_container_add(GTK_CONTAINER(content_area), auto_include);
+    
+    // Show everything
+    gtk_widget_show_all(dialog);
+    
+    // Run the dialog and process result
+    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+        // Clear existing selection
+        if (llm_plugin->selected_document_ids) {
+            g_ptr_array_free(llm_plugin->selected_document_ids, TRUE);
+        }
+        
+        // Create new selection list
+        llm_plugin->selected_document_ids = g_ptr_array_new();
+        
+        // Update auto-include setting
+        llm_plugin->include_current_document = 
+            gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(auto_include));
+        
+        // Process selected documents
+        GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
+        GtkTreeIter iter;
+        gboolean valid = gtk_tree_model_get_iter_first(model, &iter);
+        
+        while (valid) {
+            gboolean selected;
+            GeanyDocument *doc;
+            
+            gtk_tree_model_get(model, &iter, 
+                0, &selected, 
+                2, &doc, 
+                -1);
+                
+            if (selected && doc && doc->is_valid) {
+                g_ptr_array_add(llm_plugin->selected_document_ids, doc);
+            }
+            
+            valid = gtk_tree_model_iter_next(model, &iter);
+        }
+        
+        // Update the document button appearance based on selection
+        update_document_button_state(llm_plugin);
+    }
+    
+    gtk_widget_destroy(dialog);
+}
+
+static void on_document_toggled(GtkCellRendererToggle *cell, gchar *path_str, gpointer data) {
+    GtkTreeModel *model = (GtkTreeModel *)data;
+    GtkTreePath *path = gtk_tree_path_new_from_string(path_str);
+    GtkTreeIter iter;
+    gboolean active;
+    
+    // Get current state
+    gtk_tree_model_get_iter(model, &iter, path);
+    gtk_tree_model_get(model, &iter, 0, &active, -1);
+    
+    // Toggle the state
+    active ^= 1;
+    
+    // Update the model
+    gtk_list_store_set(GTK_LIST_STORE(model), &iter, 0, active, -1);
+    
+    gtk_tree_path_free(path);
+}
+
+static void update_document_button_state(LLMPlugin *plugin) {
+    // Find the documents button (assuming it's the 5th child of the top_row)
+    GtkWidget *top_row = gtk_widget_get_parent(plugin->input_text_entry);
+    if (!GTK_IS_CONTAINER(top_row)) {
+        return;
+    }
+    
+    GList *children = gtk_container_get_children(GTK_CONTAINER(top_row));
+    GtkWidget *docs_button = NULL;
+    
+    for (GList *l = children; l != NULL; l = l->next) {
+        if (GTK_IS_BUTTON(l->data) && 
+            gtk_widget_get_tooltip_text(GTK_WIDGET(l->data)) && 
+            g_str_equal(gtk_widget_get_tooltip_text(GTK_WIDGET(l->data)), _("Select documents for context"))) {
+            docs_button = GTK_WIDGET(l->data);
+            break;
+        }
+    }
+    
+    g_list_free(children);
+    
+    if (!docs_button) {
+        return;
+    }
+    
+    // Update tooltip and style based on selection state
+    guint selected_count = plugin->selected_document_ids ? plugin->selected_document_ids->len : 0;
+    
+    if (selected_count > 0) {
+        gchar *tooltip = g_strdup_printf(_("Selected documents for context (%u)"), selected_count);
+        gtk_widget_set_tooltip_text(docs_button, tooltip);
+        g_free(tooltip);
+        
+        // Add a visual indicator
+        GtkStyleContext *context = gtk_widget_get_style_context(docs_button);
+        gtk_style_context_add_class(context, "suggested-action");
+    } else {
+        gtk_widget_set_tooltip_text(docs_button, _("Select documents for context"));
+        
+        // Remove visual indicator
+        GtkStyleContext *context = gtk_widget_get_style_context(docs_button);
+        gtk_style_context_remove_class(context, "suggested-action");
+    }
+}
+
+// Handle document close events
+static void on_document_close(GObject *obj, GeanyDocument *doc, gpointer user_data)
+{
+    LLMPlugin *plugin = (LLMPlugin *)user_data;
+    if (!plugin || !doc || !plugin->selected_document_ids) {
+        return;
+    }
+    
+    // Check if the closed document was in our selection
+    gboolean removed = FALSE;
+    for (guint i = 0; i < plugin->selected_document_ids->len; i++) {
+        if (doc == g_ptr_array_index(plugin->selected_document_ids, i)) {
+            g_ptr_array_remove_index(plugin->selected_document_ids, i);
+            removed = TRUE;
+            break;
+        }
+    }
+    
+    // Only update the button if we actually removed something
+    if (removed) {
+        update_document_button_state(plugin);
+    }
+}

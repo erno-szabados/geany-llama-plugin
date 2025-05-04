@@ -76,6 +76,10 @@ typedef struct
     ThreadData *active_thread_data;
     gboolean is_generating;
     gboolean cancel_requested;
+
+    // Document context management
+    GPtrArray *selected_document_ids; // Array of document pointers or IDs
+    gboolean include_current_document; // Whether to include the current document automatically
 } LLMPlugin;
 
 /// @brief Data structure to pass to the worker thread
