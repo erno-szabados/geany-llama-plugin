@@ -6,6 +6,12 @@ plugin_LTLIBRARIES = libgeany_llm.la
 libgeany_llm_la_SOURCES = \
     plugin.c \
     plugin.h \
+    document_manager.c \
+    document_manager.h \
+    ui.c \
+    ui.h \
+    request_handler.c \
+    request_handler.h \
     settings.c \
     settings.h \
     llm_http.c \
