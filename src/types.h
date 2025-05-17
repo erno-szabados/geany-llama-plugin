@@ -67,6 +67,8 @@ typedef struct
     GtkWidget *max_tokens_spin;  // Spin button for max_tokens
     GtkWidget *api_key_entry; // Entry for API key
     
+    GtkWidget *status_label; // Label for error/status messages next to spinner
+    
     gint page_number; // Tabindex
     
     // Plugin settings

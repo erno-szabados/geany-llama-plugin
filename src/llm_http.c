@@ -2,6 +2,10 @@
 #include "llm_http.h"
 #include "llm_json.h"
 #include "llm_util.h"
+#include <unistd.h> // for sleep
+
+#define LLM_MAX_RETRIES 3
+#define LLM_RETRY_DELAY_SEC 2
 
 // Add this helper function
 
@@ -135,13 +139,57 @@ size_t llm_write_callback(void *contents, size_t size, size_t nmemb, void *userp
     return total_size;
 }
 
-// Update the llm_execute_query function
+// Helper: Map CURLcode to user-friendly error
+static const gchar* llm_curlcode_to_message(CURLcode code) {
+    switch (code) {
+        case CURLE_OPERATION_TIMEDOUT:
+            return "Connection timed out. Please check your network or server.";
+        case CURLE_COULDNT_CONNECT:
+            return "Could not connect to server. Is it running and reachable?";
+        case CURLE_COULDNT_RESOLVE_HOST:
+            return "Could not resolve server host name.";
+        case CURLE_SSL_CONNECT_ERROR:
+            return "SSL connection error.";
+        default:
+            return curl_easy_strerror(code);
+    }
+}
+
+// Enhanced: Test connection to LLM server (diagnostics)
+gboolean llm_test_connection(const gchar *server_uri, const gchar *proxy_url, GString *diagnostics_out) {
+    CURL *curl = curl_easy_init();
+    if (!curl) {
+        g_string_assign(diagnostics_out, "Failed to initialize curl");
+        return FALSE;
+    }
+    curl_easy_setopt(curl, CURLOPT_URL, server_uri);
+    curl_easy_setopt(curl, CURLOPT_NOBODY, 1L); // HEAD request
+    if (proxy_url && *proxy_url) {
+        curl_easy_setopt(curl, CURLOPT_PROXY, proxy_url);
+    }
+    CURLcode res = curl_easy_perform(curl);
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    if (res == CURLE_OK && http_code < 400) {
+        g_string_printf(diagnostics_out, "Connection OK (HTTP %ld)", http_code);
+        curl_easy_cleanup(curl);
+        return TRUE;
+    } else {
+        g_string_printf(diagnostics_out, "Connection failed: %s (HTTP %ld)",
+            llm_curlcode_to_message(res), http_code);
+        curl_easy_cleanup(curl);
+        return FALSE;
+    }
+}
+
+// Enhanced: Retry mechanism and specific error handling
 gboolean llm_execute_query(
-    const gchar *server_uri, 
-    const gchar *proxy_url, 
-    const gchar *json_payload, 
+    const gchar *server_uri,
+    const gchar *proxy_url,
+    const gchar *json_payload,
     LLMCallbacks *callbacks,
-    gboolean *cancel_flag) {
+    gboolean *cancel_flag)
+{
     if (!server_uri || !json_payload) {
         if (callbacks && callbacks->on_error) {
             callbacks->on_error("Invalid server URI or JSON payload", callbacks->user_data);
@@ -149,69 +197,76 @@ gboolean llm_execute_query(
         return FALSE;
     }
 
-    CURL *curl = curl_easy_init();
-    if (!curl) {
-        if (callbacks && callbacks->on_error) {
-            callbacks->on_error("Failed to initialize curl", callbacks->user_data);
-        }
-        return FALSE;
-    }
-
-    GString *accumulator_buffer = g_string_new(NULL);
-    
-    // Create WriteCallbackData to pass both the accumulator and callbacks
-    WriteCallbackData callback_data = {
-        .accumulator = accumulator_buffer,
-        .callbacks = callbacks,
-        .cancel_flag = cancel_flag
-    };
-
+    int attempt = 0;
+    gboolean success = FALSE;
+    CURLcode res = CURLE_OK;
+    long http_code = 0;
+    GString *accumulator_buffer = NULL;
     struct curl_slist *headers = NULL;
-    headers = curl_slist_append(headers, "Content-Type: application/json");
-    headers = curl_slist_append(headers, "Accept: text/event-stream"); 
+    CURL *curl = NULL;
 
-    g_print("SERVER URI: %s\n", server_uri);
-    curl_easy_setopt(curl, CURLOPT_URL, server_uri);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_payload);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, llm_write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &callback_data);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);           
-
-    if (!IS_NULL_OR_EMPTY(proxy_url)) {
-        curl_easy_setopt(curl, CURLOPT_PROXY, proxy_url);
-    }
-
-    // Add Authorization header if API key is set
-    if (llm_plugin && !IS_NULL_OR_EMPTY(llm_plugin->api_key)) {
-        gchar *auth_header = g_strdup_printf("Authorization: Bearer %s", llm_plugin->api_key);
-        headers = curl_slist_append(headers, auth_header);
-        g_free(auth_header);
-    }
-
-    CURLcode res = curl_easy_perform(curl);
-
-    if (res != CURLE_OK) {
-        if (callbacks && callbacks->on_error) {
-            callbacks->on_error(curl_easy_strerror(res), callbacks->user_data);
+    while (attempt < LLM_MAX_RETRIES && !success) {
+        curl = curl_easy_init();
+        if (!curl) {
+            if (callbacks && callbacks->on_error) {
+                callbacks->on_error("Failed to initialize curl", callbacks->user_data);
+            }
+            break;
+        }
+        accumulator_buffer = g_string_new(NULL);
+        WriteCallbackData callback_data = {
+            .accumulator = accumulator_buffer,
+            .callbacks = callbacks,
+            .cancel_flag = cancel_flag
+        };
+        headers = NULL;
+        headers = curl_slist_append(headers, "Content-Type: application/json");
+        headers = curl_slist_append(headers, "Accept: text/event-stream");
+        if (llm_plugin && !IS_NULL_OR_EMPTY(llm_plugin->api_key)) {
+            gchar *auth_header = g_strdup_printf("Authorization: Bearer %s", llm_plugin->api_key);
+            headers = curl_slist_append(headers, auth_header);
+            g_free(auth_header);
+        }
+        curl_easy_setopt(curl, CURLOPT_URL, server_uri);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_payload);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, llm_write_callback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &callback_data);
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        if (!IS_NULL_OR_EMPTY(proxy_url)) {
+            curl_easy_setopt(curl, CURLOPT_PROXY, proxy_url);
+        }
+        // Set timeout for network operations
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 20L);
+        res = curl_easy_perform(curl);
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+        if (res == CURLE_OK && http_code < 400) {
+            success = TRUE;
+        } else {
+            // Only retry on transient errors
+            if (res == CURLE_OPERATION_TIMEDOUT || res == CURLE_COULDNT_CONNECT) {
+                attempt++;
+                if (callbacks && callbacks->on_error) {
+                    gchar *msg = g_strdup_printf("Attempt %d/%d failed: %s. Retrying...", attempt, LLM_MAX_RETRIES, llm_curlcode_to_message(res));
+                    callbacks->on_error(msg, callbacks->user_data);
+                    g_free(msg);
+                }
+                sleep(LLM_RETRY_DELAY_SEC);
+            } else {
+                // Non-retryable error
+                if (callbacks && callbacks->on_error) {
+                    callbacks->on_error(llm_curlcode_to_message(res), callbacks->user_data);
+                }
+                break;
+            }
         }
         g_string_free(accumulator_buffer, TRUE);
         curl_slist_free_all(headers);
         curl_easy_cleanup(curl);
-        return FALSE;
     }
-
-    long http_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    if (http_code >= 400 && callbacks && callbacks->on_error) {
-        gchar *error_msg = g_strdup_printf("HTTP error: %ld", http_code);
-        callbacks->on_error(error_msg, callbacks->user_data);
-        g_free(error_msg);
+    if (!success && callbacks && callbacks->on_error) {
+        gchar *final_msg = g_strdup_printf("Failed after %d attempts. Last error: %s (HTTP %ld)", attempt, llm_curlcode_to_message(res), http_code);
+        callbacks->on_error(final_msg, callbacks->user_data);
+        g_free(final_msg);
     }
-
-    // Cleanup
-    g_string_free(accumulator_buffer, TRUE);
-    curl_slist_free_all(headers);
-    curl_easy_cleanup(curl);
-
-    return TRUE;
+    return success;
 }
