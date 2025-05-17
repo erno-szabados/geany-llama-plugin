@@ -1,4 +1,5 @@
 #include <curl/curl.h>
+#include <locale.h>
 
 #include "plugin.h"
 #include "settings.h"
@@ -24,6 +25,8 @@ LLMPlugin *llm_plugin = NULL;
 gboolean llm_plugin_init(GeanyPlugin *plugin, gpointer pdata)
 {
     g_print("LLM Plugin init\n");
+    // Set the locale to "C" for numeric formatting
+    setlocale(LC_NUMERIC, "C");
 
     llm_plugin = g_new0(LLMPlugin, 1);
     llm_plugin->geany_plugin = plugin;
@@ -109,6 +112,8 @@ GtkWidget *llm_plugin_configure(GeanyPlugin *plugin, GtkDialog *dialog, gpointer
     GtkWidget *url_label = NULL; 
     GtkWidget *proxy_label = NULL;
     GtkWidget *model_label = NULL; 
+    GtkWidget *temperature_label = NULL;
+    GtkWidget *temperature_spin = NULL;
 
     // Create a vertical box to hold the configuration widgets
     vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
@@ -158,9 +163,15 @@ GtkWidget *llm_plugin_configure(GeanyPlugin *plugin, GtkDialog *dialog, gpointer
     {
          gtk_entry_set_text(GTK_ENTRY(llm_plugin->model_entry), "");
     }
-    
     gtk_entry_set_placeholder_text(GTK_ENTRY(llm_plugin->model_entry), "e.g. qwen-coder-2.5");
 
+    // Temperature label and spin button
+    temperature_label = gtk_label_new(_("Temperature:"));
+    gtk_widget_set_halign(temperature_label, GTK_ALIGN_START);
+    temperature_spin = gtk_spin_button_new_with_range(0.0, 2.0, 0.01);
+    gtk_spin_button_set_digits(GTK_SPIN_BUTTON(temperature_spin), 2);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(temperature_spin), llm_plugin->llm_args ? llm_plugin->llm_args->temperature : 0.8);
+    llm_plugin->temperature_spin = temperature_spin;
 
     // Pack the label and entry into the vertical box
     gtk_box_pack_start(GTK_BOX(vbox), url_label, FALSE, FALSE, 0);
@@ -171,6 +182,8 @@ GtkWidget *llm_plugin_configure(GeanyPlugin *plugin, GtkDialog *dialog, gpointer
     
     gtk_box_pack_start(GTK_BOX(vbox), model_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), llm_plugin->model_entry, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), temperature_label, FALSE, FALSE, 2);
+    gtk_box_pack_start(GTK_BOX(vbox), temperature_spin, FALSE, FALSE, 2);
 
     // Add any other configuration options here in a similar manner
     g_signal_connect(dialog, "response", G_CALLBACK(on_configure_response), llm_plugin);

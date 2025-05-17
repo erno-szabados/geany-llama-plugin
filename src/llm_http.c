@@ -171,6 +171,7 @@ gboolean llm_execute_query(
     headers = curl_slist_append(headers, "Content-Type: application/json");
     headers = curl_slist_append(headers, "Accept: text/event-stream"); 
 
+    g_print("SERVER URI: %s\n", server_uri);
     curl_easy_setopt(curl, CURLOPT_URL, server_uri);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_payload);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, llm_write_callback);

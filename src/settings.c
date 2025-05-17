@@ -41,10 +41,15 @@ void on_configure_response(GtkDialog *dialog, gint response, gpointer user_data)
     llm_plugin->llm_args->model = g_strdup(model);
     g_strstrip(llm_plugin->llm_args->model);
 
+    // Get temperature value from the spin button
+    gdouble temperature = gtk_spin_button_get_value(GTK_SPIN_BUTTON(llm_plugin->temperature_spin));
+    llm_plugin->llm_args->temperature = temperature;
+
     GError *error = NULL;
     GKeyFile *key_file = g_key_file_new();
     g_key_file_set_string(key_file, "General", LLM_SERVER_URL_KEY, llm_plugin->llm_server_url);
     g_key_file_set_string(key_file, "General", LLM_ARGS_MODEL_KEY, llm_plugin->llm_args->model);
+    g_key_file_set_double(key_file, "General", LLM_ARGS_TEMPERATURE_KEY, llm_plugin->llm_args->temperature);
     g_key_file_set_string(key_file, "General", PROXY_URL_KEY, llm_plugin->proxy_url);
 
      // Save settings to a file
@@ -95,6 +100,8 @@ void llm_plugin_settings_load(gpointer user_data)
         g_print("Error reading %s: %s\n", LLM_SERVER_URL_KEY, error->message);
         g_error_free(error);
         error = NULL;
+        // Provide an empty string as default instead of NULL
+        llm_plugin->llm_server_url = g_strdup("");
     }
     
     llm_plugin->proxy_url = g_key_file_get_string(key_file, "General", PROXY_URL_KEY, &error);
@@ -102,11 +109,22 @@ void llm_plugin_settings_load(gpointer user_data)
         g_print("Error reading %s: %s\n", PROXY_URL_KEY, error->message);
         g_error_free(error);
         error = NULL;
+        // Provide an empty string as default instead of NULL
+        llm_plugin->proxy_url = g_strdup("");
     }
     
     llm_plugin->llm_args->model = g_key_file_get_string(key_file, "General", LLM_ARGS_MODEL_KEY, &error);
     if (!llm_plugin->llm_args->model) {
         g_print("Error reading %s: %s\n", LLM_ARGS_MODEL_KEY, error->message);
+        g_error_free(error);
+        error = NULL;
+        // Provide an empty string as default instead of NULL
+        llm_plugin->llm_args->model = g_strdup("");
+    }
+    
+    llm_plugin->llm_args->temperature = g_key_file_get_double(key_file, "General", LLM_ARGS_TEMPERATURE_KEY, &error);
+    if (error) {
+        g_print("Error reading %s: %s\n", LLM_ARGS_TEMPERATURE_KEY, error->message);
         g_error_free(error);
         error = NULL;
     }
