@@ -127,5 +127,6 @@ void llm_plugin_settings_load(gpointer user_data)
         g_print("Error reading %s: %s\n", LLM_ARGS_TEMPERATURE_KEY, error->message);
         g_error_free(error);
         error = NULL;
+        llm_plugin->llm_args->temperature = 0.7;
     }
 }
