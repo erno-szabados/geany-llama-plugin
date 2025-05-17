@@ -71,8 +71,10 @@ gchar* llm_construct_completion_json_payload(const gchar* query, const gchar *cu
         json_object_new_int(args->max_tokens));
     
     // Add temperature field
+    char buffer[8];
+    sprintf(buffer, "%.2f", args->temperature);
     json_object_object_add(root, "temperature", 
-        json_object_new_double(args->temperature));
+    json_object_new_double_s(args->temperature, buffer));
     
     // Add stream field (TRUE for streaming tokens)
     json_object_object_add(root, "stream", 

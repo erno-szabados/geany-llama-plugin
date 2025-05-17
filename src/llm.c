@@ -41,6 +41,15 @@ gpointer llm_thread_func(gpointer data)
 
     const gchar *path = "/v1/completions";
     gchar *json_payload = NULL;
+    
+    // Validate server URL before attempting to construct the URI
+    if (!plugin->llm_server_url || plugin->llm_server_url[0] == '\0') {
+        if (callbacks && callbacks->on_error) {
+            callbacks->on_error("Server URL is not configured. Please set it in the plugin settings.", callbacks->user_data);
+        }
+        goto EXIT;
+    }
+    
     gchar *server_uri = llm_construct_server_uri_string(plugin->llm_server_url, path);
 
     if (!server_uri) {

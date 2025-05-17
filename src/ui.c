@@ -101,10 +101,15 @@ GtkWidget *create_llm_output_widget()
     GtkWidget *spinner = gtk_spinner_new();
     gtk_widget_set_halign(spinner, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(spinner, GTK_ALIGN_CENTER);
-    gtk_box_pack_start(GTK_BOX(spinner_box), spinner, FALSE, FALSE, 0);  
-    
-    // Store reference to spinner
-    llm_plugin->spinner = spinner; 
+    gtk_box_pack_start(GTK_BOX(spinner_box), spinner, FALSE, FALSE, 0);
+    llm_plugin->spinner = spinner;
+
+    // Add a status label next to the spinner for error/status messages
+    GtkWidget *status_label = gtk_label_new("");
+    gtk_widget_set_halign(status_label, GTK_ALIGN_START);
+    gtk_widget_set_valign(status_label, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(spinner_box), status_label, FALSE, FALSE, 0);
+    llm_plugin->status_label = status_label;
 
     // Add the spinner box to the main box
     gtk_box_pack_start(GTK_BOX(main_box), spinner_box, FALSE, FALSE, 0);    
@@ -138,6 +143,18 @@ void on_input_send_clicked(GtkButton *button, gpointer user_data) {
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(llm_plugin->output_text_view));
     if (buffer) {
         gtk_text_buffer_set_text(buffer, "", -1);
+    }
+
+    // Clear status label on new request
+    if (llm_plugin->status_label) {
+        gtk_label_set_text(GTK_LABEL(llm_plugin->status_label), "");
+        gtk_widget_set_visible(llm_plugin->status_label, FALSE);
+    }
+
+    // Show a status message when generation starts
+    if (llm_plugin->status_label) {
+        gtk_label_set_text(GTK_LABEL(llm_plugin->status_label), "Generating...");
+        gtk_widget_set_visible(llm_plugin->status_label, TRUE);
     }
 
     // Set state

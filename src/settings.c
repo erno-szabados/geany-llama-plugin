@@ -41,11 +41,28 @@ void on_configure_response(GtkDialog *dialog, gint response, gpointer user_data)
     llm_plugin->llm_args->model = g_strdup(model);
     g_strstrip(llm_plugin->llm_args->model);
 
+    // Get temperature value from the spin button
+    gdouble temperature = gtk_spin_button_get_value(GTK_SPIN_BUTTON(llm_plugin->temperature_spin));
+    llm_plugin->llm_args->temperature = temperature;
+
+    // Get max_tokens value from the spin button
+    guint max_tokens = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(llm_plugin->max_tokens_spin));
+    llm_plugin->llm_args->max_tokens = max_tokens;
+
+    // API key
+    const gchar *api_key = gtk_entry_get_text(GTK_ENTRY(llm_plugin->api_key_entry));
+    g_free(llm_plugin->api_key);
+    llm_plugin->api_key = g_strdup(api_key);
+    g_strstrip(llm_plugin->api_key);
+
     GError *error = NULL;
     GKeyFile *key_file = g_key_file_new();
     g_key_file_set_string(key_file, "General", LLM_SERVER_URL_KEY, llm_plugin->llm_server_url);
     g_key_file_set_string(key_file, "General", LLM_ARGS_MODEL_KEY, llm_plugin->llm_args->model);
+    g_key_file_set_double(key_file, "General", LLM_ARGS_TEMPERATURE_KEY, llm_plugin->llm_args->temperature);
+    g_key_file_set_integer(key_file, "General", LLM_ARGS_MAX_TOKENS_KEY, llm_plugin->llm_args->max_tokens);
     g_key_file_set_string(key_file, "General", PROXY_URL_KEY, llm_plugin->proxy_url);
+    g_key_file_set_string(key_file, "General", LLM_API_KEY, llm_plugin->api_key);
 
      // Save settings to a file
     if (!g_key_file_save_to_file(key_file, config_path, &error)) {
@@ -95,6 +112,8 @@ void llm_plugin_settings_load(gpointer user_data)
         g_print("Error reading %s: %s\n", LLM_SERVER_URL_KEY, error->message);
         g_error_free(error);
         error = NULL;
+        // Provide an empty string as default instead of NULL
+        llm_plugin->llm_server_url = g_strdup("");
     }
     
     llm_plugin->proxy_url = g_key_file_get_string(key_file, "General", PROXY_URL_KEY, &error);
@@ -102,6 +121,8 @@ void llm_plugin_settings_load(gpointer user_data)
         g_print("Error reading %s: %s\n", PROXY_URL_KEY, error->message);
         g_error_free(error);
         error = NULL;
+        // Provide an empty string as default instead of NULL
+        llm_plugin->proxy_url = g_strdup("");
     }
     
     llm_plugin->llm_args->model = g_key_file_get_string(key_file, "General", LLM_ARGS_MODEL_KEY, &error);
@@ -109,5 +130,38 @@ void llm_plugin_settings_load(gpointer user_data)
         g_print("Error reading %s: %s\n", LLM_ARGS_MODEL_KEY, error->message);
         g_error_free(error);
         error = NULL;
+        // Provide an empty string as default instead of NULL
+        llm_plugin->llm_args->model = g_strdup("");
+    }
+    
+    llm_plugin->llm_args->temperature = g_key_file_get_double(key_file, "General", LLM_ARGS_TEMPERATURE_KEY, &error);
+    if (error) {
+        g_print("Error reading %s: %s\n", LLM_ARGS_TEMPERATURE_KEY, error->message);
+        g_error_free(error);
+        error = NULL;
+        llm_plugin->llm_args->temperature = 0.7;
+    }
+
+    llm_plugin->llm_args->max_tokens = g_key_file_get_integer(key_file, "General", LLM_ARGS_MAX_TOKENS_KEY, &error);
+    if (error) {
+        g_print("Error reading %s: %s\n", LLM_ARGS_MAX_TOKENS_KEY, error->message);
+        g_error_free(error);
+        error = NULL;
+        llm_plugin->llm_args->max_tokens = 100;
+    }
+
+    // Check environment variable for API key (takes precedence)
+    const gchar *env_api_key = g_getenv("OPENAI_API_KEY");
+    if (env_api_key && env_api_key[0] != '\0') {
+        g_free(llm_plugin->api_key);
+        llm_plugin->api_key = g_strdup(env_api_key);
+    } else {
+        llm_plugin->api_key = g_key_file_get_string(key_file, "General", LLM_API_KEY, &error);
+        if (!llm_plugin->api_key) {
+            g_print("Error reading %s: %s\n", LLM_API_KEY, error->message);
+            g_error_free(error);
+            error = NULL;
+            llm_plugin->api_key = g_strdup("");
+        }
     }
 }

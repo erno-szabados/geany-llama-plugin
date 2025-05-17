@@ -57,3 +57,16 @@ Look for the "LLama Assistant" plugin.
 
 Further details on configuring the LLM server will be available in the
 plugin's configuration dialog once implemented (temperature, token limit, etc.).
+
+## API Key Security
+
+For security, you can provide your API key via the `OPENAI_API_KEY` environment variable instead of saving it in the plugin's configuration file. This avoids storing your key in plaintext on disk.
+
+To use an environment variable, run Geany like this:
+
+```
+export OPENAI_API_KEY=sk-...yourkey...
+geany
+```
+
+If the environment variable is set, the plugin will use it and ignore any API key saved in the config file. You can still enter and save an API key in the settings dialog if you prefer convenience over security.
