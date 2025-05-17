@@ -66,7 +66,6 @@ gpointer llm_thread_func(gpointer data)
         }
         goto EXIT;
     }
-    g_print("%s\n", json_payload);
 
     // Execute the query with callbacks
     llm_execute_query(server_uri, plugin->proxy_url, json_payload, callbacks, thread_data->cancel_flag);
