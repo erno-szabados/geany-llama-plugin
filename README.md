@@ -70,3 +70,39 @@ geany
 ```
 
 If the environment variable is set, the plugin will use it and ignore any API key saved in the config file. You can still enter and save an API key in the settings dialog if you prefer convenience over security.
+
+## Packaging and Installing with RPM (openSUSE Leap)
+
+To build and install the plugin as an RPM package on openSUSE Leap:
+
+1. Create a source tarball from the project root (if not already present):
+   
+   ```sh
+   make dist
+   # or manually:
+   tar czf geany-llama-plugin-0.1.tar.gz geany-llama-plugin-0.1/
+   ```
+
+2. Build the source RPM (SRPM):
+   
+   ```sh
+   rpmbuild -bs geany-llama-plugin.spec --define "_sourcedir $(pwd)" --define "_srcrpmdir $(pwd)"
+   ```
+
+3. Build the binary RPM:
+   
+   ```sh
+   rpmbuild -bb geany-llama-plugin.spec --define "_sourcedir $(pwd)" --define "_builddir $(pwd)" --define "_srcrpmdir $(pwd)" --define "_rpmdir $(pwd)"
+   ```
+
+   The resulting RPM will be in the `x86_64/` directory.
+
+4. Install the RPM package:
+   
+   ```sh
+   sudo zypper install ./x86_64/geany-llama-plugin-0.1-0.x86_64.rpm
+   ```
+
+> **Note:** The generated RPM package is unsigned. Some package managers (such as zypper or YaST) may report the package as untrusted or broken due to the lack of a signature. You can safely ignore this warning for local testing, or sign the package with your own GPG key for distribution.
+
+This process ensures all dependencies are tracked and the plugin is installed in the correct location for Geany.

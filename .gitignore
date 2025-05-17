@@ -50,3 +50,4 @@ m4/
 ABOUT-NLS
 ChangeLog
 stamp-h1
+*.rpm
