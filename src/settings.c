@@ -45,11 +45,16 @@ void on_configure_response(GtkDialog *dialog, gint response, gpointer user_data)
     gdouble temperature = gtk_spin_button_get_value(GTK_SPIN_BUTTON(llm_plugin->temperature_spin));
     llm_plugin->llm_args->temperature = temperature;
 
+    // Get max_tokens value from the spin button
+    guint max_tokens = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(llm_plugin->max_tokens_spin));
+    llm_plugin->llm_args->max_tokens = max_tokens;
+
     GError *error = NULL;
     GKeyFile *key_file = g_key_file_new();
     g_key_file_set_string(key_file, "General", LLM_SERVER_URL_KEY, llm_plugin->llm_server_url);
     g_key_file_set_string(key_file, "General", LLM_ARGS_MODEL_KEY, llm_plugin->llm_args->model);
     g_key_file_set_double(key_file, "General", LLM_ARGS_TEMPERATURE_KEY, llm_plugin->llm_args->temperature);
+    g_key_file_set_integer(key_file, "General", LLM_ARGS_MAX_TOKENS_KEY, llm_plugin->llm_args->max_tokens);
     g_key_file_set_string(key_file, "General", PROXY_URL_KEY, llm_plugin->proxy_url);
 
      // Save settings to a file
@@ -128,5 +133,13 @@ void llm_plugin_settings_load(gpointer user_data)
         g_error_free(error);
         error = NULL;
         llm_plugin->llm_args->temperature = 0.7;
+    }
+
+    llm_plugin->llm_args->max_tokens = g_key_file_get_integer(key_file, "General", LLM_ARGS_MAX_TOKENS_KEY, &error);
+    if (error) {
+        g_print("Error reading %s: %s\n", LLM_ARGS_MAX_TOKENS_KEY, error->message);
+        g_error_free(error);
+        error = NULL;
+        llm_plugin->llm_args->max_tokens = 100;
     }
 }

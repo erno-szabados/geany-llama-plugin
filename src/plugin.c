@@ -114,6 +114,8 @@ GtkWidget *llm_plugin_configure(GeanyPlugin *plugin, GtkDialog *dialog, gpointer
     GtkWidget *model_label = NULL; 
     GtkWidget *temperature_label = NULL;
     GtkWidget *temperature_spin = NULL;
+    GtkWidget *max_tokens_label = NULL;
+    GtkWidget *max_tokens_spin = NULL;
 
     // Create a vertical box to hold the configuration widgets
     vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
@@ -173,6 +175,14 @@ GtkWidget *llm_plugin_configure(GeanyPlugin *plugin, GtkDialog *dialog, gpointer
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(temperature_spin), llm_plugin->llm_args ? llm_plugin->llm_args->temperature : 0.8);
     llm_plugin->temperature_spin = temperature_spin;
 
+    // Max tokens label and spin button
+    max_tokens_label = gtk_label_new(_("Max Tokens:"));
+    gtk_widget_set_halign(max_tokens_label, GTK_ALIGN_START);
+    max_tokens_spin = gtk_spin_button_new_with_range(1, 128000, 1);
+    gtk_spin_button_set_digits(GTK_SPIN_BUTTON(max_tokens_spin), 0);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(max_tokens_spin), llm_plugin->llm_args ? llm_plugin->llm_args->max_tokens : 2048);
+    llm_plugin->max_tokens_spin = max_tokens_spin;
+
     // Pack the label and entry into the vertical box
     gtk_box_pack_start(GTK_BOX(vbox), url_label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), llm_plugin->url_entry, FALSE, FALSE, 0);
@@ -184,6 +194,8 @@ GtkWidget *llm_plugin_configure(GeanyPlugin *plugin, GtkDialog *dialog, gpointer
     gtk_box_pack_start(GTK_BOX(vbox), llm_plugin->model_entry, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), temperature_label, FALSE, FALSE, 2);
     gtk_box_pack_start(GTK_BOX(vbox), temperature_spin, FALSE, FALSE, 2);
+    gtk_box_pack_start(GTK_BOX(vbox), max_tokens_label, FALSE, FALSE, 2);
+    gtk_box_pack_start(GTK_BOX(vbox), max_tokens_spin, FALSE, FALSE, 2);
 
     // Add any other configuration options here in a similar manner
     g_signal_connect(dialog, "response", G_CALLBACK(on_configure_response), llm_plugin);

@@ -6,6 +6,7 @@
 #define LLM_SERVER_URL_KEY "llm_server_url"
 #define LLM_ARGS_MODEL_KEY "model"
 #define LLM_ARGS_TEMPERATURE_KEY "temperature"
+#define LLM_ARGS_MAX_TOKENS_KEY "max_tokens"
 #define PROXY_URL_KEY "proxy"
 
 /**

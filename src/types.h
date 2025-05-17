@@ -64,6 +64,7 @@ typedef struct
     GtkWidget *proxy_entry;
     GtkWidget *model_entry; // Entry for the LLM model
     GtkWidget *temperature_spin; // Spin button for temperature
+    GtkWidget *max_tokens_spin;  // Spin button for max_tokens
     
     gint page_number; // Tabindex
     
