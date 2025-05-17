@@ -49,6 +49,12 @@ void on_configure_response(GtkDialog *dialog, gint response, gpointer user_data)
     guint max_tokens = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(llm_plugin->max_tokens_spin));
     llm_plugin->llm_args->max_tokens = max_tokens;
 
+    // API key
+    const gchar *api_key = gtk_entry_get_text(GTK_ENTRY(llm_plugin->api_key_entry));
+    g_free(llm_plugin->api_key);
+    llm_plugin->api_key = g_strdup(api_key);
+    g_strstrip(llm_plugin->api_key);
+
     GError *error = NULL;
     GKeyFile *key_file = g_key_file_new();
     g_key_file_set_string(key_file, "General", LLM_SERVER_URL_KEY, llm_plugin->llm_server_url);
@@ -56,6 +62,7 @@ void on_configure_response(GtkDialog *dialog, gint response, gpointer user_data)
     g_key_file_set_double(key_file, "General", LLM_ARGS_TEMPERATURE_KEY, llm_plugin->llm_args->temperature);
     g_key_file_set_integer(key_file, "General", LLM_ARGS_MAX_TOKENS_KEY, llm_plugin->llm_args->max_tokens);
     g_key_file_set_string(key_file, "General", PROXY_URL_KEY, llm_plugin->proxy_url);
+    g_key_file_set_string(key_file, "General", LLM_API_KEY, llm_plugin->api_key);
 
      // Save settings to a file
     if (!g_key_file_save_to_file(key_file, config_path, &error)) {
@@ -141,5 +148,14 @@ void llm_plugin_settings_load(gpointer user_data)
         g_error_free(error);
         error = NULL;
         llm_plugin->llm_args->max_tokens = 100;
+    }
+
+    llm_plugin->api_key = g_key_file_get_string(key_file, "General", LLM_API_KEY, &error);
+    if (!llm_plugin->api_key) {
+        g_print("Error reading %s: %s\n", LLM_API_KEY, error->message);
+        g_error_free(error);
+        error = NULL;
+        // Provide an empty string as default instead of NULL
+        llm_plugin->api_key = g_strdup("");
     }
 }

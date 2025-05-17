@@ -1,4 +1,3 @@
-
 #include <curl/curl.h>
 #include "llm_http.h"
 #include "llm_json.h"
@@ -180,6 +179,13 @@ gboolean llm_execute_query(
 
     if (!IS_NULL_OR_EMPTY(proxy_url)) {
         curl_easy_setopt(curl, CURLOPT_PROXY, proxy_url);
+    }
+
+    // Add Authorization header if API key is set
+    if (llm_plugin && !IS_NULL_OR_EMPTY(llm_plugin->api_key)) {
+        gchar *auth_header = g_strdup_printf("Authorization: Bearer %s", llm_plugin->api_key);
+        headers = curl_slist_append(headers, auth_header);
+        g_free(auth_header);
     }
 
     CURLcode res = curl_easy_perform(curl);

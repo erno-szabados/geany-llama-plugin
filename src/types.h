@@ -65,6 +65,7 @@ typedef struct
     GtkWidget *model_entry; // Entry for the LLM model
     GtkWidget *temperature_spin; // Spin button for temperature
     GtkWidget *max_tokens_spin;  // Spin button for max_tokens
+    GtkWidget *api_key_entry; // Entry for API key
     
     gint page_number; // Tabindex
     
@@ -82,6 +83,9 @@ typedef struct
     // Document context management
     GPtrArray *selected_document_ids; // Array of document pointers or IDs
     gboolean include_current_document; // Whether to include the current document automatically
+
+    // API key
+    gchar *api_key; // Stored API key
 } LLMPlugin;
 
 /// @brief Data structure to pass to the worker thread

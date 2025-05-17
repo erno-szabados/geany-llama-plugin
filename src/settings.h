@@ -8,6 +8,7 @@
 #define LLM_ARGS_TEMPERATURE_KEY "temperature"
 #define LLM_ARGS_MAX_TOKENS_KEY "max_tokens"
 #define PROXY_URL_KEY "proxy"
+#define LLM_API_KEY "api_key"
 
 /**
  * Functions to load and save the plugin configuration.
