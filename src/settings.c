@@ -150,12 +150,18 @@ void llm_plugin_settings_load(gpointer user_data)
         llm_plugin->llm_args->max_tokens = 100;
     }
 
-    llm_plugin->api_key = g_key_file_get_string(key_file, "General", LLM_API_KEY, &error);
-    if (!llm_plugin->api_key) {
-        g_print("Error reading %s: %s\n", LLM_API_KEY, error->message);
-        g_error_free(error);
-        error = NULL;
-        // Provide an empty string as default instead of NULL
-        llm_plugin->api_key = g_strdup("");
+    // Check environment variable for API key (takes precedence)
+    const gchar *env_api_key = g_getenv("OPENAI_API_KEY");
+    if (env_api_key && env_api_key[0] != '\0') {
+        g_free(llm_plugin->api_key);
+        llm_plugin->api_key = g_strdup(env_api_key);
+    } else {
+        llm_plugin->api_key = g_key_file_get_string(key_file, "General", LLM_API_KEY, &error);
+        if (!llm_plugin->api_key) {
+            g_print("Error reading %s: %s\n", LLM_API_KEY, error->message);
+            g_error_free(error);
+            error = NULL;
+            llm_plugin->api_key = g_strdup("");
+        }
     }
 }
